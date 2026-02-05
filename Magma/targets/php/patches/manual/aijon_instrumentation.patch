@@ -1,0 +1,51 @@
+diff --git a/ext/exif/exif.c b/ext/exif/exif.c
+index bbf1fe5f140..88021e3dc8b 100644
+--- a/ext/exif/exif.c
++++ b/ext/exif/exif.c
+@@ -2078,6 +2078,9 @@ static inline char *exif_offset_info_try_get(
+ #ifdef MAGMA_ENABLE_CANARIES
+ 	// The canaries are split so that a triggered bug is recorded as early as
+ 	//   possible.
++    IJON_MAX(offset); /* PATCHID: 86727 */
++    IJON_MAX(length); /* PATCHID: 81950 */
++    IJON_MIN((info->valid_end-info->valid_start)); /* PATCHID: 72297 */
+ 	MAGMA_LOG("PHP011", ptr_offset_overflows(info->offset_base, offset));
+ 	MAGMA_LOG("PHP011", ptr_offset_overflows(info->offset_base + offset, length));
+ 	MAGMA_LOG("PHP011", MAGMA_OR((info->offset_base + offset) < info->valid_start,
+@@ -3190,6 +3193,9 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
+ 		return true;
+ 	}
+ 	#ifdef MAGMA_ENABLE_CANARIES
++        IJON_DIST(maker_note->offset, value_len-1); /* PATCHID: 11338 */
++        IJON_MIN(value_len); /* PATCHID: 89030 */
++        IJON_DIST(value_len, 1); /* PATCHID: 35616 */
+ 		MAGMA_LOG("PHP009",MAGMA_OR(maker_note->offset == value_len - 1,value_len < 2));
+ 	#endif
+ 
+@@ -3240,6 +3246,8 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
+ 	}
+ 	#else
+ 		#ifdef MAGMA_ENABLE_CANARIES
++            IJON_MAX((size_t)(dir_start - value_ptr)); /* PATCHID: 32523 */
++            IJON_MIN(value_len); /* PATCHID: 35243 */
+ 			MAGMA_LOG("PHP004",(dir_start - value_ptr) > value_len - (2+NumDirEntries*12));
+ 		#endif
+ 	#endif
+@@ -3983,6 +3991,9 @@ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
+ 	}
+ #else
+ 	#ifdef MAGMA_ENABLE_CANARIES
++    IJON_CMP(data, NULL); /* PATCHID: 88200 */
++    IJON_MIN(ImageInfo->Thumbnail.size); /* PATCHID: 42136 */
++    IJON_DIST(ImageInfo->Thumbnail.size, 3); /* PATCHID: 59657 */
+ 	MAGMA_LOG("PHP003", MAGMA_AND((bool)data, ImageInfo->Thumbnail.size < 4));
+ 	#endif
+ 	if (!data) {
+@@ -4102,6 +4113,7 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
+ 	if (ImageInfo->FileSize >= 2 && ImageInfo->FileSize - 2 >= dir_offset) {
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++    IJON_MAX(dir_offset); /* PATCHID: 32130 */
+ 	MAGMA_LOG("PHP002", dir_offset > SIZE_MAX - 2);
+ #endif
+ 	if (ImageInfo->FileSize >= dir_offset+2) {

@@ -1,0 +1,22 @@
+[project]
+name = "aijon"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "agentlib",
+    "clang-indexer",
+    "ipdb>=0.13.13",
+    "mypy>=1.17.0",
+    "networkx>=3.5",
+    "project-utils",
+    "ptpython>=3.0.30",
+    "unidiff>=0.7.5",
+    "angr",
+]
+
+[tool.uv.sources]
+agentlib = { path = "aijon/dependencies/agentlib" }
+clang-indexer = { path = "aijon/dependencies/clang_indexer", editable = true }
+project-utils = { path = "aijon/dependencies/project_utils", editable = true }

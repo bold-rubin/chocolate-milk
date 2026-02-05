@@ -1,0 +1,110 @@
+diff --git a/parser.c b/parser.c
+index 953a923f..e935fc18 100644
+--- a/parser.c
++++ b/parser.c
+@@ -3462,6 +3462,8 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+     return(xmlDictLookup(ctxt->dict, (BASE_PTR + startPosition), len));
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_SET(end - len); /* PATCHID: 86727 */
++    // IJON_SET(BASE_PTR + startPosition); /* PATCHID: 81950 */
+     MAGMA_LOG("XML012", (end - len) != (BASE_PTR + startPosition));
+ #endif
+     return(xmlDictLookup(ctxt->dict, (end - len), len));
+@@ -5054,6 +5056,7 @@ get_more:
+                 // According to the discussion on issue #58, this bug is due
+                 // to the fix applied for Bug 030. So it might be possible
+                 // that this bug cannot be triggered unless Bug 030 is disabled.
++                // IJON_DIST(ctxt->instate, XML_PARSER_EOF); /* PATCHID: 72297 */
+                 MAGMA_LOG("XML008", ctxt->instate == XML_PARSER_EOF);
+ #endif
+ 		in++;
+@@ -8032,6 +8035,13 @@ xmlParsePEReference(xmlParserCtxtPtr ctxt)
+ #endif
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_DIST(entity->etype, XML_EXTERNAL_PARAMETER_ENTITY); /* PATCHID: 11338 */
++        // IJON_DIST(entity->etype, XML_PARSE_NOENT); /* PATCHID: 89030 */
++        // IJON_DIST(entity->etype, XML_PARSE_DTDVALID); /* PATCHID: 35616 */
++        // IJON_DIST(entity->etype, XML_PARSE_DTDLOAD); /* PATCHID: 32523 */
++        // IJON_DIST(entity->etype, XML_PARSE_DTDATTR); /* PATCHID: 35243 */
++        // IJON_MIN(ctxt->replaceEntities); /* PATCHID: 88200 */
++        // IJON_MIN(ctxt->validate); /* PATCHID: 42136 */
+     MAGMA_LOG("XML003", MAGMA_AND(entity->etype == XML_EXTERNAL_PARAMETER_ENTITY, \
+         MAGMA_AND((ctxt->options & XML_PARSE_NOENT) == 0, \
+         MAGMA_AND((ctxt->options & XML_PARSE_DTDVALID) == 0, \
+@@ -8445,6 +8455,7 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+     // However, to avoid the complexity of analyzing the real triggering
+     // condition (bounds checks and others), we'll use the condition relied
+     // on by the devs when fixing the bug.
++    IJON_MAX(RAW); /* PATCHID: 59657 */
+     MAGMA_LOG("XML017", RAW != '>');
+ #endif
+     NEXT;
+@@ -10498,6 +10509,7 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+                 // As such, it is inaccurate, but investigating further
+                 // would require more time and deeper knowledge.
+                 // This should be enough for a "simple" bug.
++                // IJON_DIST(m_tmp, 0xFFFFFFFF); /* PATCHID: 32130 */
+                 MAGMA_LOG("XML009", m_tmp < 0);
+ #endif
+ 	    } else {
+diff --git a/valid.c b/valid.c
+index a0ab3407..487df671 100644
+--- a/valid.c
++++ b/valid.c
+@@ -1339,6 +1339,8 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+         }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_MAX(xmlStrlen(content->prefix)); /* PATCHID: 64614 */
++        // IJON_MAX(xmlStrlen(content->name)); /* PATCHID: 19959 */
+         MAGMA_LOG("XML001", (size - len - xmlStrlen(content->prefix)) < (xmlStrlen(content->name) + 10));
+ #endif
+ 	    if (content->name != NULL)
+@@ -1390,6 +1392,8 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+     if (size - strlen(buf) <= 2) return;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_MIN(size); /* PATCHID: 33153 */
++    // IJON_MAX(strlen(buf)); /* PATCHID: 8740 */
+     MAGMA_LOG("XML006", size - strlen(buf) <= 2);
+ #endif
+     if (englob)
+@@ -4729,6 +4733,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+     /* Validity Constraint: ID uniqueness */
+     if (attrDecl->atype == XML_ATTRIBUTE_ID) {
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_SET(1); /* PATCHID: 3706 */
+         MAGMA_LOG("XML002", 1); // type confusion on the next line
+ #endif
+         if (xmlAddID(ctxt, doc, value, (xmlAttrPtr) ns) == NULL)
+@@ -4738,6 +4743,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+     if ((attrDecl->atype == XML_ATTRIBUTE_IDREF) ||
+ 	(attrDecl->atype == XML_ATTRIBUTE_IDREFS)) {
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_SET(2); /* PATCHID: 22283 */
+         MAGMA_LOG("XML002", 1); // type confusion on the next line
+ #endif
+         if (xmlAddRef(ctxt, doc, value, (xmlAttrPtr) ns) == NULL)
+diff --git a/xmlstring.c b/xmlstring.c
+index 720d64e5..ef1db756 100644
+--- a/xmlstring.c
++++ b/xmlstring.c
+@@ -473,6 +473,7 @@ xmlStrncat(xmlChar *cur, const xmlChar *add, int len) {
+     // whenever size < 0, the previous reallocation results in allocating a
+     // buffer of size less than `len` + 1 and then copying `len` + 1
+     // elements into it, which will cause a heap buffer overflow.
++    // IJON_DIST(size, 0xFFFFFFFF); /* PATCHID: 66204 */
+     MAGMA_LOG("XML011", size < 0);
+ #endif
+     memcpy(&ret[size], add, len * sizeof(xmlChar));
+@@ -521,6 +522,8 @@ xmlStrncatNew(const xmlChar *str1, const xmlChar *str2, int len) {
+     }
+ #ifdef MAGMA_ENABLE_CANARIES
+     // ditto ;)
++    // IJON_DIST(size, 0xFFFFFFFF); /* PATCHID: 78755 */
++    // IJON_DIST(len, 0xFFFFFFFF); /* PATCHID: 45850 */
+     MAGMA_LOG("XML011", MAGMA_OR(size < 0, len < 0));
+ #endif
+     memcpy(ret, str1, size * sizeof(xmlChar));

@@ -1,0 +1,367 @@
+diff --git a/src/aiff.c b/src/aiff.c
+index d5071bd9..441f1dfb 100644
+--- a/src/aiff.c
++++ b/src/aiff.c
+@@ -1761,6 +1761,8 @@ aiff_read_chanmap (SF_PRIVATE * psf, unsigned dword)
+ 	int layout_tag ;
+ 
+ 	bytesread = psf_binheader_readf (psf, "444", &layout_tag, &channel_bitmap, &channel_decriptions) ;
++IJON_MIN((unsigned long long)(layout_tag & 0xffff)); /* PATCHID:2609 */
++IJON_SET((int)layout_tag); /* PATCHID:1820 */
+ 
+ 	if ((map_info = aiff_caf_of_channel_layout_tag (layout_tag)) == NULL)
+ 		return 0 ;
+@@ -1779,7 +1781,10 @@ aiff_read_chanmap (SF_PRIVATE * psf, unsigned dword)
+ 	{    size_t chanmap_size = psf->sf.channels * sizeof (psf->channel_map [0]) ;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_DIST((long long)psf->sf.channels, (long long)(layout_tag & 0xffff)); /* PATCHID:1644 */
++IJON_MAX((unsigned long long)psf->sf.channels); /* PATCHID:935 */
+ 	    MAGMA_LOG("%MAGMA_BUG%", psf->sf.channels > (layout_tag & 0xffff));
++IJON_CMP((unsigned long long)psf->sf.channels, (unsigned long long)(layout_tag & 0xffff)); /* PATCHID:101 */
+ #endif
+ 
+ 		free (psf->channel_map) ;
+diff --git a/src/alaw.c b/src/alaw.c
+index 76e02a74..eebbdd4c 100644
+--- a/src/alaw.c
++++ b/src/alaw.c
+@@ -334,6 +334,7 @@ i2alaw_array (const int *ptr, int count, unsigned char *buffer)
+ #else
+ 	{
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_CMP((unsigned long long)ptr[i], (unsigned long long)INT_MIN); /* PATCHID:26042 */
+ 		MAGMA_LOG("%MAGMA_BUG%", ptr[i] == INT_MIN);
+ #endif
+ 		if (ptr [i] >= 0)
+@@ -365,6 +366,7 @@ d2alaw_array (const double *ptr, int count, unsigned char *buffer, double normfa
+ 	{
+ #ifdef MAGMA_ENABLE_CANARIES
+ 		MAGMA_LOG("%MAGMA_BUG%", !isfinite(ptr[i]));
++IJON_CTX(223); /* PATCHID:23212 */
+ #endif
+ 		if (ptr [i] >= 0)
+ #endif
+diff --git a/src/common.c b/src/common.c
+index 2793d0b7..a0a49140 100644
+--- a/src/common.c
++++ b/src/common.c
+@@ -693,7 +693,10 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 			case 's' :
+ 					/* Write a C string (guaranteed to have a zero terminator). */
+ 					strptr = va_arg (argptr, char *) ;
++
++IJON_MAX((unsigned long long) size); /* PATCHID:13693 */
+ 					size = strlen (strptr) + 1 ;
++IJON_SET((int) size); /* PATCHID:10862 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+ 					if (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len && psf_bump_header_allocation (psf, 4 + size + (size & 1)))
+@@ -706,10 +709,14 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 					memcpy (&(psf->header.ptr [psf->header.indx]), strptr, size) ;
+ 					size += (size & 1) ;
+ #else
++IJON_DIST((long long) (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1)), (long long) psf->header.len); /* PATCHID:12859 */
+ #ifdef MAGMA_ENABLE_CANARIES
+                     MAGMA_LOG("%MAGMA_BUG%", psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len);
++IJON_MAX((unsigned long long) psf->header.indx); /* PATCHID:12472 */
++IJON_DIST((long long) (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1)), (long long) psf->header.len); /* PATCHID:10021 */
+ #endif
+                     int padding = size & 1 ;
++IJON_CMP((unsigned long long) padding, 1); /* PATCHID:9908 */
+                     size += (size & 1) ;
+ 
+ 					if (psf->header.indx + (sf_count_t) size >= psf->header.len && psf_bump_header_allocation (psf, 16))
+@@ -736,11 +743,14 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 					*/
+ 					strptr = va_arg (argptr, char *) ;
+ 					size = strlen (strptr) ;
++IJON_SET((int) size); /* PATCHID:9222 */
++IJON_DIST((long long) (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1)), (long long) psf->header.len); /* PATCHID:12060 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 					if (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len && psf_bump_header_allocation (psf, 4 + size + (size & 1)))
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+ 					MAGMA_LOG("%MAGMA_BUG%", psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len);
++IJON_DIST((long long) (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1)), (long long) psf->header.len); /* PATCHID:9063 */
+ #endif
+ 					if (psf->header.indx + (sf_count_t) size > psf->header.len && psf_bump_header_allocation (psf, size))
+ #endif
+@@ -761,13 +771,16 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ #endif
+ 					count += 4 + size ;
+ 					break ;
++IJON_MAX((unsigned long long) size); /* PATCHID:11679 */
+ 
+ 			case 'p' :
+ 					/* Write a PASCAL string (as used by AIFF files).
+ 					*/
+ 					strptr = va_arg (argptr, char *) ;
+ 					size = strlen (strptr) ;
++IJON_SET((int) size); /* PATCHID:8390 */
+ 					size = (size & 1) ? size : size + 1 ;
++
+ 					size = (size > 254) ? 254 : size ;
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+@@ -775,6 +788,7 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+ 					MAGMA_LOG("%MAGMA_BUG%", psf->header.indx + 1 + (sf_count_t) size > psf->header.len);
++IJON_DIST((long long) (psf->header.indx + 1 + (sf_count_t) size), (long long) psf->header.len); /* PATCHID:7594 */
+ #endif
+ 					if (psf->header.indx + (sf_count_t) size > psf->header.len && psf_bump_header_allocation (psf, size))
+ #endif
+diff --git a/src/double64.c b/src/double64.c
+index fb2fe0ec..84108d24 100644
+--- a/src/double64.c
++++ b/src/double64.c
+@@ -96,6 +96,8 @@ double64_init	(SF_PRIVATE *psf)
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", psf->sf.channels > SF_MAX_CHANNELS);
++IJON_MAX((unsigned long long) psf->sf.channels); /* PATCHID:35809 */
++IJON_CMP((unsigned long long) psf->sf.channels, (unsigned long long) SF_MAX_CHANNELS); /* PATCHID:34907 */
+ #endif
+ 	if (psf->sf.channels < 1)
+ #endif
+diff --git a/src/file_io.c b/src/file_io.c
+index b92c787d..60d687df 100644
+--- a/src/file_io.c
++++ b/src/file_io.c
+@@ -343,6 +343,10 @@ psf_fseek (SF_PRIVATE *psf, sf_count_t offset, int whence)
+ sf_count_t
+ psf_fread (void *ptr, sf_count_t bytes, sf_count_t items, SF_PRIVATE *psf)
+ {	sf_count_t total = 0 ;
++IJON_CMP((unsigned long long) items, 0); /* PATCHID:25410 */
++IJON_CMP((unsigned long long) bytes, 0); /* PATCHID:25099 */
++IJON_MIN((unsigned long long) items); /* PATCHID:25045 */
++IJON_MIN((unsigned long long) bytes); /* PATCHID:24294 */
+ 	ssize_t	count ;
+ 
+ 	if (psf->virtual_io)
+@@ -378,6 +382,7 @@ psf_fread (void *ptr, sf_count_t bytes, sf_count_t items, SF_PRIVATE *psf)
+ 	if (psf->is_pipe)
+ 		psf->pipeoffset += total ;
+ 
++IJON_CMP((unsigned long long) bytes, 0); /* PATCHID:23738 */
+ 	return total / bytes ;
+ } /* psf_fread */
+ 
+diff --git a/src/flac.c b/src/flac.c
+index cb42b2d7..36b99fae 100644
+--- a/src/flac.c
++++ b/src/flac.c
+@@ -180,6 +180,9 @@ flac_buffer_copy (SF_PRIVATE *psf)
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", psf->sf.channels != (int) frame->header.channels);
++IJON_SET((int) frame->header.channels); /* PATCHID:28415 */
++IJON_SET((int) psf->sf.channels); /* PATCHID:27552 */
++IJON_DIST((long long) psf->sf.channels, (long long) frame->header.channels); /* PATCHID:26789 */
+ #endif
+ 
+ 	/*
+@@ -197,6 +200,7 @@ flac_buffer_copy (SF_PRIVATE *psf)
+ 		psf_log_printf (psf, "Ooops : frame->header.channels (%d) > FLAC__MAX_BLOCK_SIZE (%d)\n", __func__, __LINE__, frame->header.channels, FLAC__MAX_CHANNELS) ;
+ 
+ 	channels = SF_MIN (frame->header.channels, FLAC__MAX_CHANNELS) ;
++IJON_SET((int) channels); /* PATCHID:26392 */
+ 
+ 	if (pflac->ptr == NULL)
+ 	{	/*
+@@ -446,7 +450,10 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
+ 
+ 	switch (metadata->type)
+ 	{	case FLAC__METADATA_TYPE_STREAMINFO :
++IJON_CTX(363); /* PATCHID:18814 */
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_MAX((unsigned long long) psf->sf.channels); /* PATCHID:18544 */
++IJON_MAX((unsigned long long) psf->sf.channels); /* PATCHID:16839 */
+ 			if (psf->sf.channels > 0 && psf->sf.channels != (int) metadata->data.stream_info.channels)
+ 			{	psf_log_printf (psf, "Error: FLAC stream changed from %d to %d channels\n"
+ 									"Nothing to do but to error out.\n" ,
+@@ -454,6 +461,8 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
+ 				psf->error = SFE_FLAC_CHANNEL_COUNT_CHANGED ;
+ 				return ;
+ 				} ;
++IJON_DIST((long long) psf->sf.channels, (long long) metadata->data.stream_info.channels); /* PATCHID:15923 */
++IJON_DIST((long long) psf->sf.channels, (long long) metadata->data.stream_info.channels); /* PATCHID:17942 */
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+             MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(psf->sf.channels > 0, psf->sf.channels != (int) metadata->data.stream_info.channels));
+@@ -464,13 +473,17 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
+ 			{	psf_log_printf (psf, "Warning: FLAC stream changed sample rates from %d to %d.\n"
+ 									"Carrying on as if nothing happened.",
+ 									psf->sf.samplerate, metadata->data.stream_info.sample_rate) ;
++IJON_DIST((long long) psf->sf.samplerate, (long long) metadata->data.stream_info.sample_rate); /* PATCHID:17287 */
+ 				} ;
+ #endif
++IJON_DIST((long long) psf->sf.samplerate, (long long) metadata->data.stream_info.sample_rate); /* PATCHID:15197 */
+ #ifdef MAGMA_ENABLE_CANARIES
+             MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(psf->sf.channels > 0, psf->sf.samplerate != (int) metadata->data.stream_info.sample_rate));
+ #endif
+ 			psf->sf.channels = metadata->data.stream_info.channels ;
++IJON_SET((int) metadata->data.stream_info.channels); /* PATCHID:15101 */
+ 			psf->sf.samplerate = metadata->data.stream_info.sample_rate ;
++IJON_SET((int) metadata->data.stream_info.sample_rate); /* PATCHID:14364 */
+ 			psf->sf.frames = metadata->data.stream_info.total_samples ;
+ 
+ 			psf_log_printf (psf, "FLAC Stream Metadata\n  Channels    : %d\n  Sample rate : %d\n", psf->sf.channels, psf->sf.samplerate) ;
+diff --git a/src/paf.c b/src/paf.c
+index a3ce23e0..c62342eb 100644
+--- a/src/paf.c
++++ b/src/paf.c
+@@ -187,6 +187,9 @@ paf_read_header	(SF_PRIVATE *psf)
+ 
+ 	psf_log_printf (psf, "Sample Rate : %d\n", paf_fmt.samplerate) ;
+ 	psf_log_printf (psf, "Channels    : %d\n", paf_fmt.channels) ;
++IJON_CMP((unsigned long long) paf_fmt.channels, 256); /* PATCHID:30611 */
++IJON_MIN((unsigned long long) paf_fmt.channels); /* PATCHID:29596 */
++IJON_CMP((unsigned long long) paf_fmt.channels, 1); /* PATCHID:28657 */
+ 
+ 	psf_log_printf (psf, "Endianness  : %d => ", paf_fmt.endianness) ;
+ 	if (paf_fmt.endianness)
+diff --git a/src/sd2.c b/src/sd2.c
+index e02a9e66..786cf1a9 100644
+--- a/src/sd2.c
++++ b/src/sd2.c
+@@ -376,6 +376,7 @@ sd2_parse_rsrc_fork (SF_PRIVATE *psf)
+ 	memset (&rsrc, 0, sizeof (rsrc)) ;
+ 
+ 	rsrc.rsrc_len = psf_get_filelen (psf) ;
++IJON_SET((int) rsrc.rsrc_len); /* PATCHID:22248 */
+ 	psf_log_printf (psf, "Resource length : %d (0x%04X)\n", rsrc.rsrc_len, rsrc.rsrc_len) ;
+ 
+ 	if (rsrc.rsrc_len > psf->header.len)
+@@ -397,6 +398,7 @@ sd2_parse_rsrc_fork (SF_PRIVATE *psf)
+ 
+ 	rsrc.data_offset = read_rsrc_int (&rsrc, 0) ;
+ 	rsrc.map_offset = read_rsrc_int (&rsrc, 4) ;
++IJON_SET((int) rsrc.map_offset); /* PATCHID:21269 */
+ 	rsrc.data_length = read_rsrc_int (&rsrc, 8) ;
+ 	rsrc.map_length = read_rsrc_int (&rsrc, 12) ;
+ 
+@@ -404,6 +406,7 @@ sd2_parse_rsrc_fork (SF_PRIVATE *psf)
+ 	{	psf_log_printf (psf, "Trying offset of 0x52 bytes.\n") ;
+ 		rsrc.data_offset = read_rsrc_int (&rsrc, 0x52 + 0) + 0x52 ;
+ 		rsrc.map_offset = read_rsrc_int (&rsrc, 0x52 + 4) + 0x52 ;
++IJON_SET((int) rsrc.map_offset); /* PATCHID:20972 */
+ 		rsrc.data_length = read_rsrc_int (&rsrc, 0x52 + 8) ;
+ 		rsrc.map_length = read_rsrc_int (&rsrc, 0x52 + 12) ;
+ 		} ;
+@@ -442,11 +445,13 @@ sd2_parse_rsrc_fork (SF_PRIVATE *psf)
+ 		goto parse_rsrc_fork_cleanup ;
+ 		} ;
+ 
++IJON_DIST((long long) (rsrc.map_offset + 28), (long long) rsrc.rsrc_len); /* PATCHID:20082 */
+ 	if (rsrc.map_offset + 28 >= rsrc.rsrc_len)
+ 	{	psf_log_printf (psf, "Bad map offset (%d + 28 > %d).\n", rsrc.map_offset, rsrc.rsrc_len) ;
+ 		error = SFE_SD2_BAD_RSRC ;
+ 		goto parse_rsrc_fork_cleanup ;
+ 		} ;
++IJON_CMP((unsigned long long) (rsrc.map_offset + 28), (unsigned long long) rsrc.rsrc_len); /* PATCHID:19319 */
+ 
+ 	rsrc.string_offset = rsrc.map_offset + read_rsrc_short (&rsrc, rsrc.map_offset + 26) ;
+ 	if (rsrc.string_offset > rsrc.rsrc_len)
+@@ -467,6 +472,7 @@ sd2_parse_rsrc_fork (SF_PRIVATE *psf)
+     MAGMA_LOG("%MAGMA_BUG%", rsrc.map_offset + 28 > rsrc.rsrc_len);
+ #endif
+ 
++IJON_DIST((long long) (rsrc.map_offset + 28), (long long) rsrc.rsrc_len); /* PATCHID:18989 */
+ 	rsrc.type_count = read_rsrc_short (&rsrc, rsrc.map_offset + 28) + 1 ;
+ 	if (rsrc.type_count < 1)
+ 	{	psf_log_printf (psf, "Bad type count.\n") ;
+diff --git a/src/ulaw.c b/src/ulaw.c
+index d432e2f8..f0447f13 100644
+--- a/src/ulaw.c
++++ b/src/ulaw.c
+@@ -829,6 +829,7 @@ static inline void
+ i2ulaw_array (const int *ptr, int count, unsigned char *buffer)
+ {	for (int i = 0 ; i < count ; i++)
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_CMP((unsigned long long)ptr[i], (unsigned long long)INT_MIN); /* PATCHID:6780 */
+ 	{	if (ptr [i] == INT_MIN)
+ 			buffer [i] = ulaw_encode [INT_MAX >> (16 + 2)] ;
+ 		else if (ptr [i] >= 0)
+@@ -872,6 +873,7 @@ d2ulaw_array (const double *ptr, int count, unsigned char *buffer, double normfa
+ 			buffer [i] = ulaw_encode [psf_lrint (normfact * ptr [i])] ;
+ 		else
+ 			buffer [i] = 0x7F & ulaw_encode [- psf_lrint (normfact * ptr [i])] ;
++IJON_INC((int)(ptr[i] < 0)); /* PATCHID:5786 */
+ 		} ;
+ } /* d2ulaw_array */
+ 
+diff --git a/src/wav.c b/src/wav.c
+index 54944975..9d2c3edd 100644
+--- a/src/wav.c
++++ b/src/wav.c
+@@ -1157,9 +1157,13 @@ wav_write_header (SF_PRIVATE *psf, int calc_length)
+ 			psf->instrument->loop_count = ARRAY_LEN (psf->instrument->loops) ;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_DIST((long long)psf->instrument->loop_count, (long long)26); /* PATCHID:5539 */
++IJON_MAX((unsigned long long)psf->instrument->loop_count); /* PATCHID:4915 */
++IJON_CMP((unsigned long long)psf->instrument->loop_count, (unsigned long long)16); /* PATCHID:4171 */
+         MAGMA_LOG("%MAGMA_BUG%", psf->instrument->loop_count > ARRAY_LEN (psf->instrument->loops));
+ #endif
+ 
++IJON_SET((int)(psf->instrument->loop_count > 16)); /* PATCHID:3335 */
+ 		for (tmp = 0 ; tmp < psf->instrument->loop_count ; tmp++)
+ 		{	int type ;
+ 
+diff --git a/src/wavlike.c b/src/wavlike.c
+index 2dd06f92..73f6ab6e 100644
+--- a/src/wavlike.c
++++ b/src/wavlike.c
+@@ -307,6 +307,7 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ 				break ;
+ 
+ 		case WAVE_FORMAT_EXTENSIBLE :
++IJON_CMP((unsigned long long) wav_fmt->format, (unsigned long long) WAVE_FORMAT_EXTENSIBLE); /* PATCHID:32948 */
+ 				if (wav_fmt->ext.bytespersec != wav_fmt->ext.samplerate * wav_fmt->ext.blockalign)
+ 					psf_log_printf (psf, "  Bytes/sec     : %d (should be %d)\n", wav_fmt->ext.bytespersec, wav_fmt->ext.samplerate * wav_fmt->ext.blockalign) ;
+ 				else
+@@ -318,6 +319,7 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ 
+ 				psf_log_printf (psf, "  Valid Bits    : %d\n", wav_fmt->ext.validbits) ;
+ 
++IJON_CMP((unsigned long long) wav_fmt->ext.channelmask, (unsigned long long) 1); /* PATCHID:34253 */
+ 				if (wav_fmt->ext.channelmask == 0)
+ 					psf_log_printf (psf, "  Channel Mask  : 0x0 (should not be zero)\n") ;
+ 				else
+@@ -335,12 +337,15 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ 					/* Terminate the buffer we're going to append_snprintf into. */
+ 					buffer [0] = 0 ;
+ 
++IJON_CTX((unsigned long long) 409); /* PATCHID:33722 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 					for (bit = k = 0 ; bit < ARRAY_LEN (channel_mask_bits) && k < psf->sf.channels ; bit++)
+ #else
+ 					for (bit = k = 0 ; bit < ARRAY_LEN (channel_mask_bits) ; bit++)
+ #endif
+ 					{
++IJON_DIST((long long) k, (long long) psf->sf.channels); /* PATCHID:32530 */
++IJON_SET((int) k); /* PATCHID:31570 */
+ #ifdef MAGMA_ENABLE_CANARIES
+                         MAGMA_LOG("%MAGMA_BUG%", k >= psf->sf.channels);
+ #endif
+@@ -351,8 +356,10 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ 								} ;
+ 
+ 							psf->channel_map [k++] = channel_mask_bits [bit].id ;
++IJON_INC((int) k); /* PATCHID:30800 */
+ 							append_snprintf (buffer, sizeof (buffer), "%s, ", channel_mask_bits [bit].name) ;
+ 							} ;
++IJON_MIN((unsigned long long) bit); /* PATCHID:33456 */
+ 						} ;
+ 
+ 					/* Remove trailing ", ". */
+@@ -365,6 +372,7 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+                     MAGMA_LOG("%MAGMA_BUG%", bit < 2);
++IJON_CTX((unsigned long long) 283); /* PATCHID:33210 */
+ #endif
+                     buffer [--bit] = 0 ;
+ 					buffer [--bit] = 0 ;

@@ -1,0 +1,583 @@
+diff --git a/HTMLparser.c b/HTMLparser.c
+index b56363a3..3dd50818 100644
+--- a/HTMLparser.c
++++ b/HTMLparser.c
+@@ -2651,8 +2651,13 @@ htmlParseName(htmlParserCtxtPtr ctxt) {
+ 	       (*in == ':') || (*in == '.'))
+ 	    in++;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (in == ctxt->input->end)
+ 	    return(NULL);
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++	MAGMA_LOG("XML014", in >= ctxt->input->end);
++#endif
+ 
+ 	if ((*in > 0) && (*in < 0x80)) {
+ 	    count = in - ctxt->input->cur;
+@@ -2696,6 +2701,7 @@ htmlParseNameComplex(xmlParserCtxtPtr ctxt) {
+ 	len += l;
+ 	NEXTL(l);
+ 	c = CUR_CHAR(l);
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (ctxt->input->base != base) {
+ 	    /*
+ 	     * We changed encoding from an unknown encoding
+@@ -2703,6 +2709,10 @@ htmlParseNameComplex(xmlParserCtxtPtr ctxt) {
+ 	     */
+ 	    return(htmlParseNameComplex(ctxt));
+ 	}
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++	MAGMA_LOG("XML015", ctxt->input->base != base);
++#endif
+     }
+ 
+     if (ctxt->input->cur - ctxt->input->base < len) {
+@@ -2964,6 +2974,7 @@ htmlParseAttValue(htmlParserCtxtPtr ctxt) {
+ static xmlChar *
+ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+     size_t len = 0, startPosition = 0;
++    const xmlChar *q;
+     int err = 0;
+     int quote;
+     xmlChar *ret = NULL;
+@@ -2976,9 +2987,12 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+     quote = CUR;
+     NEXT;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (CUR_PTR < BASE_PTR)
+         return(ret);
++#endif
+     startPosition = CUR_PTR - BASE_PTR;
++    q = CUR_PTR;
+ 
+     while ((CUR != 0) && (CUR != quote)) {
+         /* TODO: Handle UTF-8 */
+@@ -2994,9 +3008,17 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+         htmlParseErr(ctxt, XML_ERR_LITERAL_NOT_FINISHED,
+                      "Unfinished SystemLiteral\n", NULL, NULL);
+     } else {
++#ifdef MAGMA_ENABLE_FIXES
+         NEXT;
+         if (err == 0)
+             ret = xmlStrndup((BASE_PTR+startPosition), len);
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("XML013", q != (BASE_PTR+startPosition));
++#endif
++        ret = xmlStrndup(q, CUR_PTR - q);
++        NEXT;
++#endif
+     }
+ 
+     return(ret);
+@@ -3016,6 +3038,7 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+ static xmlChar *
+ htmlParsePubidLiteral(htmlParserCtxtPtr ctxt) {
+     size_t len = 0, startPosition = 0;
++    const xmlChar *q;
+     int err = 0;
+     int quote;
+     xmlChar *ret = NULL;
+@@ -3031,9 +3054,12 @@ htmlParsePubidLiteral(htmlParserCtxtPtr ctxt) {
+     /*
+      * Name ::= (Letter | '_') (NameChar)*
+      */
++#ifdef MAGMA_ENABLE_FIXES
+     if (CUR_PTR < BASE_PTR)
+         return(ret);
++#endif
+     startPosition = CUR_PTR - BASE_PTR;
++    q = CUR_PTR;
+ 
+     while ((CUR != 0) && (CUR != quote)) {
+         if (!IS_PUBIDCHAR_CH(CUR)) {
+@@ -3049,9 +3075,17 @@ htmlParsePubidLiteral(htmlParserCtxtPtr ctxt) {
+         htmlParseErr(ctxt, XML_ERR_LITERAL_NOT_FINISHED,
+                      "Unfinished PubidLiteral\n", NULL, NULL);
+     } else {
++#ifdef MAGMA_ENABLE_FIXES
+         NEXT;
+         if (err == 0)
+             ret = xmlStrndup((BASE_PTR + startPosition), len);
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("XML013", q != (BASE_PTR+startPosition));
++#endif
++        ret = xmlStrndup(q, CUR_PTR - q);
++        NEXT;
++#endif
+     }
+ 
+     return(ret);
+@@ -5495,6 +5529,9 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ 	else
+ 	    avail = (ptrdiff_t)xmlBufUse(in->buf->buffer) -
+                     (in->cur - in->base);
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML007", avail != (in->end - in->cur));
++#endif
+ 	if ((avail == 0) && (terminate)) {
+ 	    htmlAutoCloseOnEnd(ctxt);
+ 	    if ((ctxt->nameNr == 0) && (ctxt->instate != XML_PARSER_EOF)) {
+diff --git a/Makefile.am b/Makefile.am
+index a9284b95..835df2ad 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -8,7 +8,7 @@ DIST_SUBDIRS = include . doc example fuzz python xstc
+ 
+ AM_CPPFLAGS = -I$(top_builddir)/include -I$(srcdir)/include
+ 
+-AM_CFLAGS = $(EXTRA_CFLAGS) $(THREAD_CFLAGS) $(Z_CFLAGS) $(LZMA_CFLAGS)
++AM_CFLAGS := $(EXTRA_CFLAGS) $(THREAD_CFLAGS) $(Z_CFLAGS) $(LZMA_CFLAGS) $(XML_COPTS)
+ 
+ check_PROGRAMS=testSchemas testRelax testSAX testHTML testXPath testURI \
+                testThreads testC14N testAutomata testRegexp \
+diff --git a/parser.c b/parser.c
+index 255bd254..953a923f 100644
+--- a/parser.c
++++ b/parser.c
+@@ -2758,6 +2758,8 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 	        ctxt->nbentities += ent->checked / 2;
+ 	    if (ent != NULL) {
+                 if (ent->content == NULL) {
++		    int m_tmp = 1;
++#ifdef MAGMA_ENABLE_FIXES
+ 		    /*
+ 		     * Note: external parsed entities will not be loaded,
+ 		     * it is not required for a non-validating parser to
+@@ -2769,10 +2771,20 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 			(ctxt->validate != 0)) {
+ 			xmlLoadEntityContent(ctxt, ent);
+ 		    } else {
++			m_tmp = 0;
+ 			xmlWarningMsg(ctxt, XML_ERR_ENTITY_PROCESSING,
+ 		  "not validating will not read content for PE entity %s\n",
+ 		                      ent->name, NULL);
+ 		    }
++#else
++		    xmlLoadEntityContent(ctxt, ent);
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++		    MAGMA_LOG("XML010", MAGMA_AND(m_tmp == 1, \
++			MAGMA_AND((ctxt->options & XML_PARSE_NOENT) == 0, \
++			MAGMA_AND((ctxt->options & XML_PARSE_DTDVALID) == 0, \
++			ctxt->validate == 0))));
++#endif
+ 		}
+ 		ctxt->depth++;
+ 		rep = xmlStringDecodeEntities(ctxt, ent->content, what,
+@@ -3390,6 +3402,7 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+     int c;
+     int count = 0;
+     size_t startPosition = 0;
++    const xmlChar *end;
+ 
+ #ifdef DEBUG
+     nbParseNCNameComplex++;
+@@ -3400,6 +3413,7 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+      */
+     GROW;
+     startPosition = CUR_PTR - BASE_PTR;
++    end = ctxt->input->cur;
+     c = CUR_CHAR(l);
+     if ((c == ' ') || (c == '>') || (c == '/') || /* accelerators */
+ 	(!xmlIsNameStartChar(ctxt, c) || (c == ':'))) {
+@@ -3421,6 +3435,7 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+ 	}
+ 	len += l;
+ 	NEXTL(l);
++	end = ctxt->input->cur;
+ 	c = CUR_CHAR(l);
+ 	if (c == 0) {
+ 	    count = 0;
+@@ -3434,6 +3449,7 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+             if (ctxt->instate == XML_PARSER_EOF)
+                 return(NULL);
+ 	    ctxt->input->cur += l;
++	    end = ctxt->input->cur;
+ 	    c = CUR_CHAR(l);
+ 	}
+     }
+@@ -3442,7 +3458,14 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+         xmlFatalErr(ctxt, XML_ERR_NAME_TOO_LONG, "NCName");
+         return(NULL);
+     }
++#ifdef MAGMA_ENABLE_FIXES
+     return(xmlDictLookup(ctxt->dict, (BASE_PTR + startPosition), len));
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML012", (end - len) != (BASE_PTR + startPosition));
++#endif
++    return(xmlDictLookup(ctxt->dict, (end - len), len));
++#endif
+ }
+ 
+ /**
+@@ -5021,10 +5044,18 @@ get_more:
+ 		} else
+ 		    xmlFatalErrMsgStr(ctxt, XML_ERR_HYPHEN_IN_COMMENT,
+ 		                      "Double hyphen within comment\n", NULL);
++#ifdef MAGMA_ENABLE_FIXES
+                 if (ctxt->instate == XML_PARSER_EOF) {
+                     xmlFree(buf);
+                     return;
+                 }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++                // According to the discussion on issue #58, this bug is due
++                // to the fix applied for Bug 030. So it might be possible
++                // that this bug cannot be triggered unless Bug 030 is disabled.
++                MAGMA_LOG("XML008", ctxt->instate == XML_PARSER_EOF);
++#endif
+ 		in++;
+ 		ctxt->input->col++;
+ 	    }
+@@ -7989,6 +8020,7 @@ xmlParsePEReference(xmlParserCtxtPtr ctxt)
+ 	    if (xmlParserEntityCheck(ctxt, 0, entity, 0))
+ 	        return;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	    if ((entity->etype == XML_EXTERNAL_PARAMETER_ENTITY) &&
+ 	        ((ctxt->options & XML_PARSE_NOENT) == 0) &&
+ 		((ctxt->options & XML_PARSE_DTDVALID) == 0) &&
+@@ -7997,7 +8029,17 @@ xmlParsePEReference(xmlParserCtxtPtr ctxt)
+ 		(ctxt->replaceEntities == 0) &&
+ 		(ctxt->validate == 0))
+ 		return;
++#endif
+ 
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML003", MAGMA_AND(entity->etype == XML_EXTERNAL_PARAMETER_ENTITY, \
++        MAGMA_AND((ctxt->options & XML_PARSE_NOENT) == 0, \
++        MAGMA_AND((ctxt->options & XML_PARSE_DTDVALID) == 0, \
++        MAGMA_AND((ctxt->options & XML_PARSE_DTDLOAD) == 0, \
++        MAGMA_AND((ctxt->options & XML_PARSE_DTDATTR) == 0, \
++        MAGMA_AND(ctxt->replaceEntities == 0, \
++        ctxt->validate == 0)))))));
++#endif
+ 	    input = xmlNewEntityInputStream(ctxt, entity);
+ 	    if (xmlPushInput(ctxt, input) < 0) {
+                 xmlFreeInputStream(input);
+@@ -8391,10 +8433,20 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+     /*
+      * We should be at the end of the DOCTYPE declaration.
+      */
++#ifdef MAGMA_ENABLE_FIXES
+     if (RAW != '>') {
+ 	xmlFatalErr(ctxt, XML_ERR_DOCTYPE_NOT_FINISHED, NULL);
+ 	return;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    // This condition is not sufficient for the bug to actually be triggered
++    // but it is necessary.
++    // However, to avoid the complexity of analyzing the real triggering
++    // condition (bounds checks and others), we'll use the condition relied
++    // on by the devs when fixing the bug.
++    MAGMA_LOG("XML017", RAW != '>');
++#endif
+     NEXT;
+ }
+ 
+@@ -10432,11 +10484,22 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+ 
+             handler = xmlFindCharEncodingHandler((const char *) encoding);
+ 	    if (handler != NULL) {
+-		if (xmlSwitchToEncoding(ctxt, handler) < 0) {
++                int m_tmp = xmlSwitchToEncoding(ctxt, handler);
++#ifdef MAGMA_ENABLE_FIXES
++		if (m_tmp < 0) {
+ 		    /* failed to convert */
+ 		    ctxt->errNo = XML_ERR_UNSUPPORTED_ENCODING;
+ 		    return(NULL);
+ 		}
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++                // This condition is not sufficient to indicate the original
++                // bug was triggered, but it is necessary.
++                // As such, it is inaccurate, but investigating further
++                // would require more time and deeper knowledge.
++                // This should be enough for a "simple" bug.
++                MAGMA_LOG("XML009", m_tmp < 0);
++#endif
+ 	    } else {
+ 		xmlFatalErrMsgStr(ctxt, XML_ERR_UNSUPPORTED_ENCODING,
+ 			"Unsupported encoding %s\n", encoding);
+@@ -12557,12 +12620,14 @@ xmlHaltParser(xmlParserCtxtPtr ctxt) {
+ 	    ctxt->input->free((xmlChar *) ctxt->input->base);
+ 	    ctxt->input->free = NULL;
+ 	}
++#ifdef MAGMA_ENABLE_FIXES
+         if (ctxt->input->buf != NULL) {
+             xmlFreeParserInputBuffer(ctxt->input->buf);
+             ctxt->input->buf = NULL;
+         }
+-	ctxt->input->cur = BAD_CAST"";
+         ctxt->input->length = 0;
++#endif
++	ctxt->input->cur = BAD_CAST"";
+ 	ctxt->input->base = ctxt->input->cur;
+         ctxt->input->end = ctxt->input->cur;
+     }
+diff --git a/valid.c b/valid.c
+index 5ee391c0..a0ab3407 100644
+--- a/valid.c
++++ b/valid.c
+@@ -1310,6 +1310,7 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+             strcat(buf, "#PCDATA");
+ 	    break;
+ 	case XML_ELEMENT_CONTENT_ELEMENT: {
++#ifdef MAGMA_ENABLE_FIXES
+             int qnameLen = xmlStrlen(content->name);
+ 
+ 	    if (content->prefix != NULL)
+@@ -1318,10 +1319,28 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+ 		strcat(buf, " ...");
+ 		return;
+ 	    }
++#endif
+ 	    if (content->prefix != NULL) {
++#ifdef MAGMA_ENABLE_FIXES
++#else
++            if (size - len < xmlStrlen(content->prefix) + 10) {
++                strcat(buf, " ...");
++                return;
++            }
++#endif
+ 		strcat(buf, (char *) content->prefix);
+ 		strcat(buf, ":");
+ 	    }
++#ifdef MAGMA_ENABLE_FIXES
++#else
++        if (size - len < xmlStrlen(content->name) + 10) {
++            strcat(buf, " ...");
++            return;
++        }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("XML001", (size - len - xmlStrlen(content->prefix)) < (xmlStrlen(content->name) + 10));
++#endif
+ 	    if (content->name != NULL)
+ 		strcat(buf, (char *) content->name);
+ 	    break;
+@@ -1367,7 +1386,12 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+ 		xmlSnprintfElementContent(buf, size, content->c2, 0);
+ 	    break;
+     }
++#ifdef MAGMA_ENABLE_FIXES
+     if (size - strlen(buf) <= 2) return;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML006", size - strlen(buf) <= 2);
++#endif
+     if (englob)
+         strcat(buf, ")");
+     switch (content->ocur) {
+@@ -4700,15 +4724,22 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+      * xmlAddID and xmlAddRef for namespace declarations, but it makes
+      * no practical sense to use ID types anyway.
+      */
+-#if 0
++#ifdef MAGMA_ENABLE_FIXES
++#else
+     /* Validity Constraint: ID uniqueness */
+     if (attrDecl->atype == XML_ATTRIBUTE_ID) {
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("XML002", 1); // type confusion on the next line
++#endif
+         if (xmlAddID(ctxt, doc, value, (xmlAttrPtr) ns) == NULL)
+ 	    ret = 0;
+     }
+ 
+     if ((attrDecl->atype == XML_ATTRIBUTE_IDREF) ||
+ 	(attrDecl->atype == XML_ATTRIBUTE_IDREFS)) {
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("XML002", 1); // type confusion on the next line
++#endif
+         if (xmlAddRef(ctxt, doc, value, (xmlAttrPtr) ns) == NULL)
+ 	    ret = 0;
+     }
+diff --git a/xmlmemory.c b/xmlmemory.c
+index c51f49ae..02647ef2 100644
+--- a/xmlmemory.c
++++ b/xmlmemory.c
+@@ -172,12 +172,17 @@ xmlMallocLoc(size_t size, const char * file, int line)
+ 
+     TEST_POINT
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (size > (MAX_SIZE_T - RESERVE_SIZE)) {
+ 	xmlGenericError(xmlGenericErrorContext,
+ 		"xmlMallocLoc : Unsigned overflow\n");
+ 	xmlMemoryDump();
+ 	return(NULL);
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML005", size > (MAX_SIZE_T - RESERVE_SIZE));
++#endif
+ 
+     p = (MEMHDR *) malloc(RESERVE_SIZE+size);
+ 
+@@ -248,12 +253,17 @@ xmlMallocAtomicLoc(size_t size, const char * file, int line)
+ 
+     TEST_POINT
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (size > (MAX_SIZE_T - RESERVE_SIZE)) {
+ 	xmlGenericError(xmlGenericErrorContext,
+ 		"xmlMallocAtomicLoc : Unsigned overflow\n");
+ 	xmlMemoryDump();
+ 	return(NULL);
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML005", size > (MAX_SIZE_T - RESERVE_SIZE));
++#endif
+ 
+     p = (MEMHDR *) malloc(RESERVE_SIZE+size);
+ 
+@@ -359,12 +369,17 @@ xmlReallocLoc(void *ptr,size_t size, const char * file, int line)
+ #endif
+     xmlMutexUnlock(xmlMemMutex);
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (size > (MAX_SIZE_T - RESERVE_SIZE)) {
+ 	xmlGenericError(xmlGenericErrorContext,
+ 		"xmlReallocLoc : Unsigned overflow\n");
+ 	xmlMemoryDump();
+ 	return(NULL);
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML005", size > (MAX_SIZE_T - RESERVE_SIZE));
++#endif
+ 
+     tmp = (MEMHDR *) realloc(p,RESERVE_SIZE+size);
+     if (!tmp) {
+@@ -513,12 +528,17 @@ xmlMemStrdupLoc(const char *str, const char *file, int line)
+     if (!xmlMemInitialized) xmlInitMemory();
+     TEST_POINT
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (size > (MAX_SIZE_T - RESERVE_SIZE)) {
+ 	xmlGenericError(xmlGenericErrorContext,
+ 		"xmlMemStrdupLoc : Unsigned overflow\n");
+ 	xmlMemoryDump();
+ 	return(NULL);
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML005", size > (MAX_SIZE_T - RESERVE_SIZE));
++#endif
+ 
+     p = (MEMHDR *) malloc(RESERVE_SIZE+size);
+     if (!p) {
+diff --git a/xmlregexp.c b/xmlregexp.c
+index 8d01c2ba..18834e41 100644
+--- a/xmlregexp.c
++++ b/xmlregexp.c
+@@ -5137,11 +5137,20 @@ xmlFAParseCharRange(xmlRegParserCtxtPtr ctxt) {
+ 	return;
+     }
+ 
++#ifdef MAGMA_ENABLE_FIXES
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("XML016", end < start);
++#endif
++    NEXTL(len);
++#endif
+     /* TODO check that the values are acceptable character ranges for XML */
+     if (end < start) {
+ 	ERROR("End of range is before start of range");
+     } else {
++#ifdef MAGMA_ENABLE_FIXES
+         NEXTL(len);
++#endif
+         xmlRegAtomAddRange(ctxt, ctxt->atom, ctxt->neg,
+ 		           XML_REGEXP_CHARVAL, start, end, NULL);
+     }
+diff --git a/xmlstring.c b/xmlstring.c
+index e8a1e45d..720d64e5 100644
+--- a/xmlstring.c
++++ b/xmlstring.c
+@@ -460,13 +460,21 @@ xmlStrncat(xmlChar *cur, const xmlChar *add, int len) {
+         return(xmlStrndup(add, len));
+ 
+     size = xmlStrlen(cur);
++#ifdef MAGMA_ENABLE_FIXES
+     if (size < 0)
+         return(NULL);
++#endif
+     ret = (xmlChar *) xmlRealloc(cur, (size + len + 1) * sizeof(xmlChar));
+     if (ret == NULL) {
+         xmlErrMemory(NULL, NULL);
+         return(cur);
+     }
++#ifdef MAGMA_ENABLE_CANARIES
++    // whenever size < 0, the previous reallocation results in allocating a
++    // buffer of size less than `len` + 1 and then copying `len` + 1
++    // elements into it, which will cause a heap buffer overflow.
++    MAGMA_LOG("XML011", size < 0);
++#endif
+     memcpy(&ret[size], add, len * sizeof(xmlChar));
+     ret[size + len] = 0;
+     return(ret);
+@@ -491,8 +499,10 @@ xmlStrncatNew(const xmlChar *str1, const xmlChar *str2, int len) {
+ 
+     if (len < 0) {
+         len = xmlStrlen(str2);
++#ifdef MAGMA_ENABLE_FIXES
+         if (len < 0)
+             return(NULL);
++#endif
+     }
+     if ((str2 == NULL) || (len == 0))
+         return(xmlStrdup(str1));
+@@ -500,13 +510,19 @@ xmlStrncatNew(const xmlChar *str1, const xmlChar *str2, int len) {
+         return(xmlStrndup(str2, len));
+ 
+     size = xmlStrlen(str1);
++#ifdef MAGMA_ENABLE_FIXES
+     if (size < 0)
+         return(NULL);
++#endif
+     ret = (xmlChar *) xmlMalloc((size + len + 1) * sizeof(xmlChar));
+     if (ret == NULL) {
+         xmlErrMemory(NULL, NULL);
+         return(xmlStrndup(str1, size));
+     }
++#ifdef MAGMA_ENABLE_CANARIES
++    // ditto ;)
++    MAGMA_LOG("XML011", MAGMA_OR(size < 0, len < 0));
++#endif
+     memcpy(ret, str1, size * sizeof(xmlChar));
+     memcpy(&ret[size], str2, len * sizeof(xmlChar));
+     ret[size + len] = 0;
+diff --git a/xzlib.c b/xzlib.c
+index 9a347385..eda365a2 100644
+--- a/xzlib.c
++++ b/xzlib.c
+@@ -591,11 +591,17 @@ xz_decomp(xz_statep state)
+             xz_error(state, LZMA_PROG_ERROR, "compression error");
+             return -1;
+         }
++#ifdef MAGMA_ENABLE_FIXES
+         if ((state->how != GZIP) &&
+             (ret != LZMA_OK) && (ret != LZMA_STREAM_END)) {
+             xz_error(state, ret, "lzma error");
+             return -1;
+         }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("XML004", MAGMA_AND(state->how != GZIP, \
++            MAGMA_AND(ret != LZMA_OK, ret != LZMA_STREAM_END)));
++#endif
+     } while (strm->avail_out && ret != LZMA_STREAM_END);
+ 
+     /* update available output and crc check value */

@@ -1,0 +1,684 @@
+diff --git a/ext/fts5/fts5_hash.c b/ext/fts5/fts5_hash.c
+index 1471dff..328ba39 100644
+--- a/ext/fts5/fts5_hash.c
++++ b/ext/fts5/fts5_hash.c
+@@ -456,15 +456,18 @@ static int fts5HashEntrySort(
+   for(iSlot=0; iSlot<pHash->nSlot; iSlot++){
+     Fts5HashEntry *pIter;
+     for(pIter=pHash->aSlot[iSlot]; pIter; pIter=pIter->pHashNext){
++// IJON_DIST((long long)(pIter->nKey+1), (long long)nTerm); /* PATCHID:39617 */
+ #ifdef MAGMA_ENABLE_FIXES
+       if( pTerm==0 
+        || (pIter->nKey+1>=nTerm && 0==memcmp(fts5EntryKey(pIter), pTerm, nTerm))
+       ){
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_SET((int)(pTerm != 0 && pIter->nKey+1 < nTerm)); /* PATCHID:38837 */
+       MAGMA_LOG("SQL001", MAGMA_AND(pTerm != 0, pIter->nKey+1 < nTerm));
+ #endif
+       if(pTerm==0 || 0==memcmp(fts5EntryKey(pIter), pTerm, nTerm)) {
++// IJON_CMP((unsigned long long)(pIter->nKey+1), (unsigned long long)nTerm); /* PATCHID:38670 */
+ #endif
+         Fts5HashEntry *pEntry = pIter;
+         pEntry->pScanNext = 0;
+diff --git a/ext/misc/zipfile.c b/ext/misc/zipfile.c
+index 3f4320b..7a41e82 100644
+--- a/ext/misc/zipfile.c
++++ b/ext/misc/zipfile.c
+@@ -1579,6 +1579,7 @@ static int zipfileUpdate(
+   }
+ 
+   if( nVal>1 ){
++// IJON_INC(nVal); /* PATCHID:24698 */
+     /* Check that "sz" and "rawdata" are both NULL: */
+     if( sqlite3_value_type(apVal[5])!=SQLITE_NULL ){
+       zipfileTableErr(pTab, "sz must be NULL");
+@@ -1593,6 +1594,7 @@ static int zipfileUpdate(
+       if( sqlite3_value_type(apVal[7])==SQLITE_NULL ){
+         /* data=NULL. A directory */
+         bIsDir = 1;
++// IJON_SET(bIsDir); /* PATCHID:24594 */
+       }else{
+         /* Value specified for "data", and possibly "method". This must be
+         ** a regular file or a symlink. */
+@@ -1630,6 +1632,8 @@ static int zipfileUpdate(
+ 
+     if( rc==SQLITE_OK ){
+       zPath = (const char*)sqlite3_value_text(apVal[2]);
++// IJON_SET((unsigned long long)(zPath == 0 ? 1 : 0)); /* PATCHID:23878 */
++// IJON_CMP((unsigned long long)zPath, 0); /* PATCHID:23443 */
+ #ifdef MAGMA_ENABLE_FIXES
+       if( zPath==0 ) zPath = "";
+ #else
+@@ -1981,6 +1985,8 @@ void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
+ 
+   /* Martial the arguments into stack variables */
+   if( nVal!=2 && nVal!=4 && nVal!=5 ){
++// IJON_CMP((unsigned long long)nVal, 5); /* PATCHID:23016 */
++// IJON_CMP((unsigned long long)nVal, 4); /* PATCHID:22387 */
+     zErr = sqlite3_mprintf("wrong number of arguments to function zipfile()");
+     rc = SQLITE_ERROR;
+     goto zipfile_step_out;
+@@ -2022,6 +2028,7 @@ void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
+   ** be deflated or simply stored in the zip archive. */
+   if( sqlite3_value_type(pData)==SQLITE_NULL ){
+     bIsDir = 1;
++// IJON_SET(1); /* PATCHID:21586 */
+     iMethod = 0;
+   }else{
+     aData = sqlite3_value_blob(pData);
+@@ -2061,6 +2068,7 @@ void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
+     }
+   }else{
+     if( nName==0 || zName[nName-1]!='/' ){
++// IJON_INC(1); /* PATCHID:21155 */
+       zName = zFree = sqlite3_mprintf("%s/", zName);
+       if( zName==0 ){
+         rc = SQLITE_NOMEM;
+diff --git a/ext/rtree/rtree.c b/ext/rtree/rtree.c
+index a2828df..d090359 100644
+--- a/ext/rtree/rtree.c
++++ b/ext/rtree/rtree.c
+@@ -3650,6 +3650,7 @@ static int getNodeSize(
+   int rc;
+   char *zSql;
+   if( isCreate ){
++// IJON_SET((int) isCreate); /* PATCHID:13885 */
+     int iPageSize = 0;
+     zSql = sqlite3_mprintf("PRAGMA %Q.page_size", pRtree->zDb);
+     rc = getIntFromStmt(db, zSql, &iPageSize);
+@@ -3659,6 +3660,7 @@ static int getNodeSize(
+         pRtree->iNodeSize = 4+pRtree->nBytesPerCell*RTREE_MAXCELLS;
+       }
+     }else{
++// IJON_SET((int) rc); /* PATCHID:13600 */
+       *pzErr = sqlite3_mprintf("%s", sqlite3_errmsg(db));
+     }
+   }else{
+@@ -3682,6 +3684,9 @@ static int getNodeSize(
+ #endif
+   }
+ 
++// IJON_MIN((unsigned long long) pRtree->iNodeSize); /* PATCHID:13247 */
++// IJON_SET((int) rc); /* PATCHID:12744 */
++
+   sqlite3_free(zSql);
+   return rc;
+ }
+diff --git a/src/build.c b/src/build.c
+index 78e3100..d3da52d 100644
+--- a/src/build.c
++++ b/src/build.c
+@@ -2445,6 +2445,7 @@ void sqlite3EndTable(
+   ** table itself.  So mark it read-only.
+   */
+   if( db->init.busy ){
++// IJON_CTX(53); /* PATCHID:21007 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if( pSelect ){
+       sqlite3ErrorMsg(pParse, "");
+@@ -2452,6 +2453,7 @@ void sqlite3EndTable(
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_CMP((unsigned long long)(pSelect != 0), 1); /* PATCHID:20066 */
+     MAGMA_LOG("SQL007", pSelect != 0);
+ #endif
+     p->tnum = db->init.newTnum;
+diff --git a/src/expr.c b/src/expr.c
+index 4f2fd31..ca26bf5 100644
+--- a/src/expr.c
++++ b/src/expr.c
+@@ -98,6 +98,8 @@ Expr *sqlite3ExprAddCollateToken(
+   int dequote              /* True to dequote pCollName */
+ ){
+   if( pCollName->n>0 ){
++// IJON_CMP((unsigned long long) dequote, (unsigned long long) 0); /* PATCHID:49965 */
++// IJON_MAX((unsigned long long) pCollName->n); /* PATCHID:49861 */
+ #ifdef MAGMA_ENABLE_FIXES
+     Expr *pNew = sqlite3ExprAlloc(pParse->db, TK_COLLATE, pCollName, dequote);
+ #else
+@@ -5624,6 +5626,7 @@ static int impliesNotNullRow(Walker *pWalker, Expr *pExpr){
+   testcase( pExpr->op==TK_AGG_FUNCTION );
+   if( ExprHasProperty(pExpr, EP_FromJoin) ) return WRC_Prune;
+   switch( pExpr->op ){
++// IJON_SET((int)pExpr->op); /* PATCHID:3916 */
+     case TK_ISNOT:
+     case TK_ISNULL:
+     case TK_NOTNULL:
+@@ -5680,6 +5683,8 @@ static int impliesNotNullRow(Walker *pWalker, Expr *pExpr){
+     case TK_GE: {
+       Expr *pLeft = pExpr->pLeft;
+       Expr *pRight = pExpr->pRight;
++// IJON_CMP((unsigned long long)pRight->op, (unsigned long long)TK_COLUMN); /* PATCHID:3125 */
++// IJON_CMP((unsigned long long)pLeft->op, (unsigned long long)TK_COLUMN); /* PATCHID:3086 */
+       testcase( pExpr->op==TK_EQ );
+       testcase( pExpr->op==TK_NE );
+       testcase( pExpr->op==TK_LT );
+@@ -5696,6 +5701,8 @@ static int impliesNotNullRow(Walker *pWalker, Expr *pExpr){
+       )
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_CMP((unsigned long long)pRight->y.pTab, (unsigned long long)0); /* PATCHID:2092 */
++// IJON_CMP((unsigned long long)pLeft->y.pTab, (unsigned long long)0); /* PATCHID:2008 */
+       MAGMA_LOG("SQL017", MAGMA_OR(
+                             MAGMA_AND(pLeft->op==TK_COLUMN, pLeft->y.pTab == 0),
+                             MAGMA_AND(pLeft->op!=TK_COLUMN,
+diff --git a/src/pragma.c b/src/pragma.c
+index 5d5a274..3304ba8 100644
+--- a/src/pragma.c
++++ b/src/pragma.c
+@@ -1543,10 +1543,12 @@ void sqlite3Pragma(
+   **      PRAGMA schema.integrity_check;
+   */
+   case PragTyp_INTEGRITY_CHECK: {
++// IJON_CTX((unsigned long long) 430); /* PATCHID:45381 */
+     int i, j, addr, mxErr;
+     Table *pObjTab = 0;     /* Check only this one table, if not NULL */
+ 
+     int isQuick = (sqlite3Tolower(zLeft[0])=='q');
++// IJON_SET((int) isQuick); /* PATCHID:44581 */
+ 
+     /* If the PRAGMA command was of the form "PRAGMA <db>.integrity_check",
+     ** then iDb is set to the index of the database identified by <db>.
+@@ -1560,6 +1562,7 @@ void sqlite3Pragma(
+     assert( iDb>=0 );
+     assert( iDb==0 || pId2->z );
+     if( pId2->z==0 ) iDb = -1;
++// IJON_INC((int) iDb); /* PATCHID:44351 */
+ 
+     /* Initialize the VDBE program */
+     pParse->nMem = 6;
+@@ -1580,6 +1583,7 @@ void sqlite3Pragma(
+ 
+     /* Do an integrity check on each database file */
+     for(i=0; i<db->nDb; i++){
++// IJON_INC((int) i); /* PATCHID:43652 */
+       HashElem *x;     /* For looping over tables in the schema */
+       Hash *pTbls;     /* Set of all tables in the schema */
+       int *aRoot;      /* Array of root page numbers of all btrees */
+@@ -1603,6 +1607,7 @@ void sqlite3Pragma(
+         Index *pIdx;                      /* An index on pTab */
+         int nIdx;                         /* Number of indexes on pTab */
+         if( pObjTab && pObjTab!=pTab ) continue;
++// IJON_SET((int) (pObjTab ? 1 : 0)); /* PATCHID:43452 */
+         if( HasRowid(pTab) ) cnt++;
+         for(nIdx=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, nIdx++){ cnt++; }
+         if( nIdx>mxIdx ) mxIdx = nIdx;
+@@ -1642,6 +1647,7 @@ void sqlite3Pragma(
+       /* Make sure all the indices are constructed correctly.
+       */
+       for(x=sqliteHashFirst(pTbls); x; x=sqliteHashNext(x)){
++// IJON_INC((int) cnt); /* PATCHID:42521 */
+         Table *pTab = sqliteHashData(x);
+         Index *pIdx, *pPk;
+         Index *pPrior = 0;
+@@ -1651,6 +1657,7 @@ void sqlite3Pragma(
+ 
+         if( pTab->tnum<1 ) continue;  /* Skip VIEWs or VIRTUAL TABLEs */
+         if( pObjTab && pObjTab!=pTab ) continue;
++// IJON_SET((int) (pObjTab && pObjTab!=pTab ? 1 : 0)); /* PATCHID:42355 */
+         pPk = HasRowid(pTab) ? 0 : sqlite3PrimaryKeyIndex(pTab);
+         sqlite3OpenTableAndIndices(pParse, pTab, OP_OpenRead, 0,
+                                    1, 0, &iDataCur, &iIdxCur);
+@@ -1672,10 +1679,13 @@ void sqlite3Pragma(
+         }
+         /* Verify that all NOT NULL columns really are NOT NULL */
+         for(j=0; j<pTab->nCol; j++){
++// IJON_INC((int) j); /* PATCHID:41386 */
+           char *zErr;
+           int jmp2;
+           if( j==pTab->iPKey ) continue;
++// IJON_SET((int) (j==pTab->iPKey ? 1 : 0)); /* PATCHID:41259 */
+           if( pTab->aCol[j].notNull==0 ) continue;
++
+           sqlite3ExprCodeGetColumnOfTable(v, pTab, iDataCur, j, 3);
+ #ifndef MAGMA_ENABLE_FIXES
+ #ifdef MAGMA_ENABLE_CANARIES
+diff --git a/src/printf.c b/src/printf.c
+index cd6d2c8..e6842c0 100644
+--- a/src/printf.c
++++ b/src/printf.c
+@@ -410,6 +410,7 @@ void sqlite3_str_vappendf(
+     assert( width>=0 );
+     assert( precision>=(-1) );
+     switch( xtype ){
++IJON_SET((int)xtype); /* PATCHID:47899 */
+       case etPOINTER:
+         flag_long = sizeof(char*)==sizeof(i64) ? 2 :
+                      sizeof(char*)==sizeof(long int) ? 1 : 0;
+@@ -546,6 +547,7 @@ void sqlite3_str_vappendf(
+         idx = precision & 0xfff;
+ #else
+         idx = precision;
++IJON_MAX((unsigned long long)precision); /* PATCHID:47025 */
+ #endif
+         rounder = arRound[idx%10];
+         while( idx>=10 ){ rounder *= 1.0e-10; idx -= 10; }
+@@ -560,6 +562,7 @@ void sqlite3_str_vappendf(
+         }
+         /* Normalize realvalue to within 10.0 > realvalue >= 1.0 */
+         exp = 0;
++IJON_MAX((unsigned long long)exp); /* PATCHID:46507 */
+         if( sqlite3IsNaN((double)realvalue) ){
+           bufpt = "NaN";
+           length = 3;
+@@ -605,6 +608,7 @@ void sqlite3_str_vappendf(
+           e2 = 0;
+         }else{
+           e2 = exp;
++IJON_MAX((unsigned long long)e2); /* PATCHID:46388 */
+         }
+         {
+           i64 szBufNeeded;           /* Size of a temporary buffer needed */
+@@ -612,6 +616,7 @@ void sqlite3_str_vappendf(
+           szBufNeeded = MAX(e2,0)+(i64)precision+(i64)width+15;
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_DIST((long long)(e2 + precision), (long long)(0x7fffffff - 15 - width)); /* PATCHID:45529 */
+           MAGMA_LOG("SQL019", MAX(e2,0) + precision > (((int)-1)&0x7fffffff) - 15 - width);
+ #endif
+           szBufNeeded = MAX(e2,0)+(i64)precision+(i64)width+15;
+diff --git a/src/resolve.c b/src/resolve.c
+index 49b609c..e0cc382 100644
+--- a/src/resolve.c
++++ b/src/resolve.c
+@@ -191,13 +191,17 @@ Bitmask sqlite3ExprColUsed(Expr *pExpr){
+   Bitmask result;
+ 
+   n = pExpr->iColumn;
++// IJON_SET(n); /* PATCHID:49037 */
+   pExTab = pExpr->y.pTab;
++// IJON_MAX((unsigned long long)pExTab->nCol); /* PATCHID:48029 */
+   assert( pExTab!=0 );
+ #ifdef MAGMA_ENABLE_FIXES
+   if( (pExTab->tabFlags & TF_HasGenerated)!=0
+    && (pExTab->aCol[n].colFlags & COLFLAG_GENERATED)!=0 
+   ){
+     testcase( pExTab->nCol==BMS-1 );
++// IJON_DIST((long long)pExTab->nCol, (long long)BMS); /* PATCHID:48023 */
++// IJON_CMP((unsigned long long)pExTab->nCol, (unsigned long long)BMS); /* PATCHID:47958 */
+     testcase( pExTab->nCol==BMS );
+     result = pExTab->nCol>=BMS ? ALLBITS : MASKBIT(pExTab->nCol)-1;
+   }else{
+@@ -210,6 +214,7 @@ Bitmask sqlite3ExprColUsed(Expr *pExpr){
+   }
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_CTX(346); /* PATCHID:47948 */
+   MAGMA_LOG("SQL015",
+     MAGMA_AND((pExTab->tabFlags & TF_HasGenerated)!=0,
+     MAGMA_AND((pExTab->aCol[n].colFlags & COLFLAG_GENERATED)!=0,
+diff --git a/src/select.c b/src/select.c
+index 60ae57e..77ed2e3 100644
+--- a/src/select.c
++++ b/src/select.c
+@@ -2695,6 +2695,7 @@ static int multiSelect(
+   assert( pPrior->pLimit==0 );
+ 
+   v = sqlite3GetVdbe(pParse);
++// IJON_SET((int)pParse->nErr); /* PATCHID:18276 */
+   assert( v!=0 );  /* The VDBE already created by calling function */
+ 
+   /* Create the destination temporary table if necessary
+@@ -2750,6 +2751,7 @@ static int multiSelect(
+         pPrior->pLimit = p->pLimit;
+         SELECTTRACE(1, pParse, p, ("multiSelect UNION ALL left...\n"));
+         rc = sqlite3Select(pParse, pPrior, &dest);
++// IJON_INC((int)pParse->nErr); /* PATCHID:17704 */
+         pPrior->pLimit = 0;
+         if( rc ){
+           goto multi_select_end;
+@@ -2768,6 +2770,7 @@ static int multiSelect(
+         ExplainQueryPlan((pParse, 1, "UNION ALL"));
+         SELECTTRACE(1, pParse, p, ("multiSelect UNION ALL right...\n"));
+         rc = sqlite3Select(pParse, p, &dest);
++// IJON_INC((int)pParse->nErr); /* PATCHID:17393 */
+         testcase( rc!=SQLITE_OK );
+         pDelete = p->pPrior;
+         p->pPrior = pPrior;
+@@ -2821,6 +2824,7 @@ static int multiSelect(
+         sqlite3SelectDestInit(&uniondest, priorOp, unionTab);
+         SELECTTRACE(1, pParse, p, ("multiSelect EXCEPT/UNION left...\n"));
+         rc = sqlite3Select(pParse, pPrior, &uniondest);
++// IJON_INC((int)pParse->nErr); /* PATCHID:16685 */
+         if( rc ){
+           goto multi_select_end;
+         }
+@@ -2841,6 +2845,7 @@ static int multiSelect(
+                           sqlite3SelectOpName(p->op)));
+         SELECTTRACE(1, pParse, p, ("multiSelect EXCEPT/UNION right...\n"));
+         rc = sqlite3Select(pParse, p, &uniondest);
++// IJON_INC((int)pParse->nErr); /* PATCHID:15746 */
+         testcase( rc!=SQLITE_OK );
+         assert( p->pOrderBy==0 );
+         pDelete = p->pPrior;
+@@ -2902,6 +2907,7 @@ static int multiSelect(
+         sqlite3SelectDestInit(&intersectdest, SRT_Union, tab1);
+         SELECTTRACE(1, pParse, p, ("multiSelect INTERSECT left...\n"));
+         rc = sqlite3Select(pParse, pPrior, &intersectdest);
++// IJON_INC((int)pParse->nErr); /* PATCHID:15528 */
+         if( rc ){
+           goto multi_select_end;
+         }
+@@ -2919,6 +2925,7 @@ static int multiSelect(
+                           sqlite3SelectOpName(p->op)));
+         SELECTTRACE(1, pParse, p, ("multiSelect INTERSECT right...\n"));
+         rc = sqlite3Select(pParse, p, &intersectdest);
++// IJON_INC((int)pParse->nErr); /* PATCHID:14896 */
+         testcase( rc!=SQLITE_OK );
+         pDelete = p->pPrior;
+         p->pPrior = pPrior;
+@@ -2959,10 +2966,12 @@ static int multiSelect(
+     }
+   #endif
+   }
++// IJON_MAX((unsigned long long)pParse->nErr); /* PATCHID:14218 */
+ #ifdef MAGMA_ENABLE_FIXES
+   if( pParse->nErr ) goto multi_select_end;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_CMP((unsigned long long)pParse->nErr, (unsigned long long)0); /* PATCHID:14017 */
+   MAGMA_LOG("SQL014", pParse->nErr != 0);
+ #endif
+   /* Compute collating sequences used by 
+@@ -4020,6 +4029,7 @@ static int flattenSubquery(
+   assert( p!=0 );
+   assert( p->pPrior==0 );
+   if( OptimizationDisabled(db, SQLITE_QueryFlattener) ) return 0;
++// IJON_INC(1); /* PATCHID:11995 */
+   pSrc = p->pSrc;
+   assert( pSrc && iFrom>=0 && iFrom<pSrc->nSrc );
+   pSubitem = &pSrc->a[iFrom];
+@@ -4044,21 +4054,29 @@ static int flattenSubquery(
+     return 0;                                            /* Restriction (15) */
+   }
+   if( pSubSrc->nSrc==0 ) return 0;                       /* Restriction (7)  */
++// IJON_INC(2); /* PATCHID:11097 */
+   if( pSub->selFlags & SF_Distinct ) return 0;           /* Restriction (4)  */
++// IJON_INC(3); /* PATCHID:10852 */
+   if( pSub->pLimit && (pSrc->nSrc>1 || isAgg) ){
+      return 0;         /* Restrictions (8)(9) */
+   }
++// IJON_INC(4); /* PATCHID:10472 */
+   if( p->pOrderBy && pSub->pOrderBy ){
+      return 0;                                           /* Restriction (11) */
+   }
++// IJON_INC(5); /* PATCHID:9536 */
+   if( isAgg && pSub->pOrderBy ) return 0;                /* Restriction (16) */
++// IJON_INC(6); /* PATCHID:9035 */
+   if( pSub->pLimit && p->pWhere ) return 0;              /* Restriction (19) */
++// IJON_INC(7); /* PATCHID:8866 */
+   if( pSub->pLimit && (p->selFlags & SF_Distinct)!=0 ){
+      return 0;         /* Restriction (21) */
+   }
++// IJON_INC(8); /* PATCHID:8682 */
+   if( pSub->selFlags & (SF_Recursive) ){
+     return 0; /* Restrictions (22) */
+   }
++// IJON_INC(9); /* PATCHID:8253 */
+ 
+   /*
+   ** If the subquery is the right operand of a LEFT JOIN, then the
+@@ -4081,7 +4099,12 @@ static int flattenSubquery(
+   ** See also tickets #306, #350, and #3300.
+   */
+   if( (pSubitem->fg.jointype & JT_OUTER)!=0 ){
++// IJON_CMP((unsigned long long)(pSubitem->fg.jointype & JT_OUTER), (unsigned long long)JT_OUTER); /* PATCHID:8050 */
++// IJON_SET((int)(pSubitem->fg.jointype & JT_OUTER)); /* PATCHID:7060 */
+     isLeftJoin = 1;
++// IJON_CMP((unsigned long long)(p->selFlags & SF_Distinct), (unsigned long long)SF_Distinct); /* PATCHID:6740 */
++// IJON_MAX((unsigned long long)(p->selFlags & SF_Distinct)); /* PATCHID:6352 */
++// IJON_SET(10); /* PATCHID:5795 */
+     if( pSubSrc->nSrc>1                   /* (3a) */
+      || isAgg                             /* (3b) */
+      || IsVirtual(pSubSrc->a[0].pTab)     /* (3c) */
+@@ -4093,6 +4116,7 @@ static int flattenSubquery(
+     }
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("SQL003", (p->selFlags & SF_Distinct)!=0);
++// IJON_SET(99); /* PATCHID:4983 */
+ #endif
+   }
+ #ifdef SQLITE_EXTRA_IFNULLROW
+@@ -5520,6 +5544,7 @@ static int selectExpander(Walker *pWalker, Select *p){
+      pParse->nErr ||
+ #endif
+      db->mallocFailed || sqliteProcessJoin(pParse, p) ){
++// IJON_CMP((unsigned long long)pParse->nErr, (unsigned long long)0); /* PATCHID:4274 */
+       return WRC_Abort;
+   }
+ #ifdef MAGMA_ENABLE_CANARIES
+@@ -6694,6 +6719,7 @@ int sqlite3Select(
+ #endif
+ #endif
+   ){
++// IJON_CTX(85); /* PATCHID:994 */
+ #ifdef MAGMA_ENABLE_CANARIES
+ #ifndef SQLITE_OMIT_WINDOWFUNC
+     MAGMA_LOG("SQL006", p->pWin != 0);
+diff --git a/src/vdbe.c b/src/vdbe.c
+index 16ecbc8..5ecf3d2 100644
+--- a/src/vdbe.c
++++ b/src/vdbe.c
+@@ -2041,9 +2041,12 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
+   u16 flags3;         /* Copy of initial value of pIn3->flags */
+ 
+   pIn1 = &aMem[pOp->p1];
++// IJON_INC((int)pOp->opcode); /* PATCHID:37848 */
+   pIn3 = &aMem[pOp->p3];
+   flags1 = pIn1->flags;
++// IJON_SET((int)(flags1 & MEM_TypeMask)); /* PATCHID:36959 */
+   flags3 = pIn3->flags;
++// IJON_SET((int)(flags3 & MEM_TypeMask)); /* PATCHID:36574 */
+   if( (flags1 & flags3 & MEM_Int)!=0 ){
+     assert( (pOp->p5 & SQLITE_AFF_MASK)!=SQLITE_AFF_TEXT || CORRUPT_DB );
+     /* Common case of comparison of two integers */
+@@ -2102,8 +2105,10 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
+     /* Neither operand is NULL and we couldn't do the special high-speed
+     ** integer comparison case.  So do a general-case comparison. */
+     affinity = pOp->p5 & SQLITE_AFF_MASK;
++// IJON_SET((int)affinity); /* PATCHID:36154 */
+     if( affinity>=SQLITE_AFF_NUMERIC ){
+       if( (flags1 | flags3)&MEM_Str ){
++// IJON_INC((int)((flags1 | flags3) & MEM_Str)); /* PATCHID:35643 */
+         if( (flags1 & (MEM_Int|MEM_IntReal|MEM_Real|MEM_Str))==MEM_Str ){
+           applyNumericAffinity(pIn1,0);
+           testcase( flags3==pIn3->flags );
+@@ -2114,6 +2119,7 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
+         }
+       }
+     }else if( affinity==SQLITE_AFF_TEXT ){
++// IJON_INC((int)((flags1 & MEM_Str) == 0)); /* PATCHID:35188 */
+       if( (flags1 & MEM_Str)==0 && (flags1&(MEM_Int|MEM_Real|MEM_IntReal))!=0 ){
+         testcase( pIn1->flags & MEM_Int );
+         testcase( pIn1->flags & MEM_Real );
+@@ -2124,6 +2130,7 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
+         if( NEVER(pIn1==pIn3) ) flags3 = flags1 | MEM_Str;
+       }
+       if( (flags3 & MEM_Str)==0 && (flags3&(MEM_Int|MEM_Real|MEM_IntReal))!=0 ){
++// IJON_INC((int)((flags3 & MEM_Str) == 0)); /* PATCHID:34973 */
+         testcase( pIn3->flags & MEM_Int );
+         testcase( pIn3->flags & MEM_Real );
+         testcase( pIn3->flags & MEM_IntReal );
+@@ -2158,6 +2165,7 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
+   assert( (pIn3->flags & MEM_Dyn) == (flags3 & MEM_Dyn) );
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_CMP((unsigned long long)(pIn3->flags & MEM_Dyn), (unsigned long long)(flags3 & MEM_Dyn)); /* PATCHID:34906 */
+   MAGMA_LOG("SQL016", (pIn3->flags & MEM_Dyn) != (flags3 & MEM_Dyn));
+ #endif
+   pIn3->flags = flags3;
+diff --git a/src/vdbemem.c b/src/vdbemem.c
+index 969946d..dbda7d4 100644
+--- a/src/vdbemem.c
++++ b/src/vdbemem.c
+@@ -1239,17 +1239,22 @@ static SQLITE_NOINLINE const void *valueToText(sqlite3_value* pVal, u8 enc){
+   assert( !sqlite3VdbeMemIsRowSet(pVal) );
+   assert( (pVal->flags & (MEM_Null))==0 );
+   if( pVal->flags & (MEM_Blob|MEM_Str) ){
++// IJON_SET((int)(pVal->flags & (MEM_Blob|MEM_Str))); /* PATCHID:27094 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if( ExpandBlob(pVal) ) return 0;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_INC(1); /* PATCHID:26660 */
+     MAGMA_LOG("SQL009", ExpandBlob(pVal));
+ #endif
+     pVal->flags |= MEM_Str;
++// IJON_SET((int)pVal->flags); /* PATCHID:25640 */
+     if( pVal->enc != (enc & ~SQLITE_UTF16_ALIGNED) ){
++// IJON_CMP((unsigned long long)pVal->enc, (unsigned long long)(enc & ~SQLITE_UTF16_ALIGNED)); /* PATCHID:25272 */
+       sqlite3VdbeChangeEncoding(pVal, enc & ~SQLITE_UTF16_ALIGNED);
+     }
+     if( (enc & SQLITE_UTF16_ALIGNED)!=0 && 1==(1&SQLITE_PTR_TO_INT(pVal->z)) ){
++// IJON_SET((int)(enc & SQLITE_UTF16_ALIGNED)); /* PATCHID:24871 */
+       assert( (pVal->flags & (MEM_Ephem|MEM_Static))!=0 );
+       if( sqlite3VdbeMemMakeWriteable(pVal)!=SQLITE_OK ){
+         return 0;
+diff --git a/src/where.c b/src/where.c
+index 18f3b6d..e8bba4d 100644
+--- a/src/where.c
++++ b/src/where.c
+@@ -2831,6 +2831,7 @@ static int whereLoopAddBtreeIndex(
+   ** On the other hand, the extra seeks could end up being significantly
+   ** more expensive.  */
+   assert( 42==sqlite3LogEst(18) );
++// IJON_SET((int)pNew->nLTerm); /* PATCHID:19330 */
+   if( saved_nEq==saved_nSkip
+    && saved_nEq+1<pProbe->nKeyCol
+    && saved_nEq==pNew->nLTerm
+@@ -2842,6 +2843,7 @@ static int whereLoopAddBtreeIndex(
+    && (rc = whereLoopResize(db, pNew, pNew->nLTerm+1))==SQLITE_OK
+ #endif
+   ){
++// IJON_SET((int)pNew->nLSlot); /* PATCHID:18814 */
+ #ifdef MAGMA_ENABLE_CANARIES
+       MAGMA_LOG("SQL013", pNew->nLSlot < (pNew->nLTerm+1));
+ #endif
+diff --git a/src/whereexpr.c b/src/whereexpr.c
+index cb5fb0c..a73c705 100644
+--- a/src/whereexpr.c
++++ b/src/whereexpr.c
+@@ -1053,11 +1053,13 @@ static void exprAnalyze(
+     return;
+   }
+   pTerm = &pWC->a[idxTerm];
++// IJON_SET((int)idxTerm); /* PATCHID:30737 */
+   pMaskSet = &pWInfo->sMaskSet;
+   pExpr = pTerm->pExpr;
+   assert( pExpr->op!=TK_AS && pExpr->op!=TK_COLLATE );
+   prereqLeft = sqlite3WhereExprUsage(pMaskSet, pExpr->pLeft);
+   op = pExpr->op;
++// IJON_SET((int)op); /* PATCHID:30599 */
+   if( op==TK_IN ){
+     assert( pExpr->pRight==0 );
+     if( sqlite3ExprCheckIN(pParse, pExpr) ) return;
+@@ -1124,6 +1126,7 @@ static void exprAnalyze(
+         idxNew = whereClauseInsert(pWC, pDup, TERM_VIRTUAL|TERM_DYNAMIC);
+         if( idxNew==0 ) return;
+         pNew = &pWC->a[idxNew];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:30300 */
+         markTermAsChild(pWC, idxNew, idxTerm);
+         if( op==TK_IS ) pNew->wtFlags |= TERM_IS;
+         pTerm = &pWC->a[idxTerm];
+@@ -1136,6 +1139,7 @@ static void exprAnalyze(
+       }else{
+         pDup = pExpr;
+         pNew = pTerm;
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:30080 */
+       }
+       pNew->wtFlags |= exprCommute(pParse, pDup);
+       pNew->leftCursor = aiCurCol[0];
+@@ -1186,6 +1190,7 @@ static void exprAnalyze(
+       testcase( idxNew==0 );
+       exprAnalyze(pSrc, pWC, idxNew);
+       pTerm = &pWC->a[idxTerm];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:29240 */
+       markTermAsChild(pWC, idxNew, idxTerm);
+     }
+   }
+@@ -1199,6 +1204,7 @@ static void exprAnalyze(
+     assert( pWC->op==TK_AND );
+     exprAnalyzeOrTerm(pSrc, pWC, idxTerm);
+     pTerm = &pWC->a[idxTerm];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:28956 */
+   }
+ #endif /* SQLITE_OMIT_OR_OPTIMIZATION */
+   /* The form "x IS NOT NULL" can sometimes be evaluated more efficiently
+@@ -1231,6 +1237,7 @@ static void exprAnalyze(
+         pNewTerm->eOperator = WO_GT;
+         markTermAsChild(pWC, idxNew, idxTerm);
+         pTerm = &pWC->a[idxTerm];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:28593 */
+         pTerm->wtFlags |= TERM_COPIED;
+         pNewTerm->prereqAll = pTerm->prereqAll;
+       }
+@@ -1316,6 +1323,7 @@ static void exprAnalyze(
+     testcase( idxNew2==0 );
+     exprAnalyze(pSrc, pWC, idxNew2);
+     pTerm = &pWC->a[idxTerm];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:28056 */
+     if( isComplete ){
+       markTermAsChild(pWC, idxNew1, idxTerm);
+       markTermAsChild(pWC, idxNew2, idxTerm);
+@@ -1350,6 +1358,7 @@ static void exprAnalyze(
+       exprAnalyze(pSrc, pWC, idxNew);
+     }
+     pTerm = &pWC->a[idxTerm];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:27929 */
+     pTerm->wtFlags |= TERM_CODED|TERM_VIRTUAL;  /* Disable the original */
+     pTerm->eOperator = 0;
+   }
+@@ -1420,6 +1429,7 @@ static void exprAnalyze(
+         pNewTerm->eMatchOp = eOp2;
+         markTermAsChild(pWC, idxNew, idxTerm);
+         pTerm = &pWC->a[idxTerm];
++// IJON_INC((int)(pTerm - &pWC->a[idxTerm])); /* PATCHID:27534 */
+         pTerm->wtFlags |= TERM_COPIED;
+         pNewTerm->prereqAll = pTerm->prereqAll;
+       }
+@@ -1436,6 +1446,7 @@ static void exprAnalyze(
+   pTerm = &pWC->a[idxTerm];
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
++// IJON_CMP((unsigned long long)(pTerm - &pWC->a[idxTerm]), (unsigned long long)0); /* PATCHID:27370 */
+   MAGMA_LOG("SQL010", pTerm!=&pWC->a[idxTerm]);
+ #endif
+ #endif
+diff --git a/src/window.c b/src/window.c
+index bbd1b88..4f6ae61 100644
+--- a/src/window.c
++++ b/src/window.c
+@@ -895,8 +895,10 @@ static ExprList *exprListAppendList(
+   int bIntToNull
+ ){
+   if( pAppend ){
++// IJON_MAX((unsigned long long)pAppend->nExpr); /* PATCHID:34193 */
+     int i;
+     int nInit = pList ? pList->nExpr : 0;
++// IJON_SET((int)nInit); /* PATCHID:33626 */
+     for(i=0; i<pAppend->nExpr; i++){
+       sqlite3 *db = pParse->db;
+       Expr *pDup = sqlite3ExprDup(db, pAppend->a[i].pExpr, 0);
+@@ -906,10 +908,12 @@ static ExprList *exprListAppendList(
+         break;
+       }
+       if( bIntToNull ){
++// IJON_CMP((unsigned long long)bIntToNull, (unsigned long long)1); /* PATCHID:32683 */
+         int iDummy;
+         Expr *pSub;
+         pSub = sqlite3ExprSkipCollateAndLikely(pDup);
+         if( sqlite3ExprIsInteger(pSub, &iDummy) ){
++// IJON_INC((int)i); /* PATCHID:32416 */
+           pSub->op = TK_NULL;
+           pSub->flags &= ~(EP_IntValue|EP_IsTrue|EP_IsFalse);
+ #ifdef MAGMA_ENABLE_FIXES
+@@ -917,6 +921,7 @@ static ExprList *exprListAppendList(
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+           MAGMA_LOG("SQL020", pDup->u.zToken !=0);
++// IJON_CMP((unsigned long long)pDup->u.zToken, (unsigned long long)0); /* PATCHID:31579 */
+ #endif
+         }
+       }

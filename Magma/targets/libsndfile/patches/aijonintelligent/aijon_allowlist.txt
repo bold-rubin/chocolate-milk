@@ -1,0 +1,14 @@
+wav_write_header
+flac_buffer_copy
+psf_fread
+i2alaw_array
+paf_read_header
+wavlike_read_fmt_chunk
+sf_flac_meta_callback
+i2ulaw_array
+aiff_read_chanmap
+d2ulaw_array
+double64_init
+d2alaw_array
+sd2_parse_rsrc_fork
+psf_binheader_writef

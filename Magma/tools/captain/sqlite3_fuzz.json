@@ -1,0 +1,10 @@
+{
+  "shellphish_aijon": {
+    "sqlite3": {
+      "sqlite3_fuzz": {
+        "vul_id": ["SQL012", "SQL002", "SQL003", "SQL006", "SQL007", "SQL009", "SQL010", "SQL012", "SQL013", "SQL014", "SQL015", "SQL016", "SQL017", "SQL018", "SQL019", "SQL020"]
+      }
+    }
+  }
+}
+

@@ -1,0 +1,34 @@
+ARG BASE_IMAGE=
+FROM gcr.io/oss-fuzz-base/base-builder AS aijon-invscov-compile-base
+
+RUN apt -y update && apt -y upgrade
+
+# Set the timezone to Phoenix, AZ
+ENV TZ=America/Phoenix
+RUN apt -y update && apt -y install tzdata
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# AFLplusplus dependencies
+RUN apt -y install llvm-10 make clang-10 clang python3-dev build-essential libtool-bin automake flex bison libglib2.0-dev libpixman-1-dev python3-setuptools
+
+# DAIKON dependencies
+RUN apt -y install openjdk-11-jdk git rsync
+
+RUN git clone https://github.com/eurecom-s3/invscov.git /invscov
+WORKDIR /invscov
+
+RUN make -C InvsCov/dump LLVM_CONFIG=llvm-config-10
+RUN make -C InvsCov/instrument LLVM_CONFIG=llvm-config-10
+RUN make -C daikon/ compile
+RUN make -C daikon/ daikon.jar
+RUN cp daikon/daikon.jar .
+
+FROM ${BASE_IMAGE} AS final-builder
+
+RUN mkdir -p $SRC/shellphish/invscov
+COPY --from=aijon-invscov-compile-base /invscov $SRC/shellphish/invscov
+
+RUN ln -sf $SRC/shellphish/invscov/InvsCov/dump-cc /src/aflplusplus/afl-clang-fast
+RUN ln -sf $SRC/shellphish/invscov/InvsCov/dump-c++ /src/aflplusplus/afl-clang-fast++
+
+RUN mkdir -p /invscov/output_path

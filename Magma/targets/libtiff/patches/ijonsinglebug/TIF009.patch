@@ -1,0 +1,228 @@
+diff --git a/libtiff/tif_dir.c b/libtiff/tif_dir.c
+index 376b6c8e..d5dbddc3 100644
+--- a/libtiff/tif_dir.c
++++ b/libtiff/tif_dir.c
+@@ -131,6 +131,11 @@ setExtraSamples(TIFF* tif, va_list ap, uint32_t* v)
+         }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++        // if ( td->td_transferfunction[0] != NULL)
++        // {
++        //     IJON_MAX(td->td_samplesperpixel - *v); /* PATCHID: 86727 */
++        //     IJON_DIST(td->td_samplesperpixel, td->td_extrasamples); /* PATCHID: 81950 */
++        // }
+         MAGMA_LOG("TIF012", MAGMA_AND(td->td_transferfunction[0] != NULL, MAGMA_AND(td->td_samplesperpixel - *v > 1, \
+             !(td->td_samplesperpixel - td->td_extrasamples > 1))));
+ #endif
+diff --git a/libtiff/tif_dirread.c b/libtiff/tif_dirread.c
+index 707450b3..69a0047c 100644
+--- a/libtiff/tif_dirread.c
++++ b/libtiff/tif_dirread.c
+@@ -5969,6 +5969,8 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+         nstrips = (uint32_t)nstrips64;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_MAX(nstrips); /* PATCHID: 72297 */
++        // IJON_MIN(TIFFhowmany_32(td->td_imagelength, rowsperstrip)); /* PATCHID: 11338 */
+         MAGMA_LOG("TIF007", nstrips > TIFFhowmany_32(td->td_imagelength, rowsperstrip));
+ #endif
+         /* If we are going to allocate a lot of memory, make sure that the */
+@@ -5983,6 +5985,10 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+         }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_DIST(tif->tif_mode, O_RDONLY); /* PATCHID: 89030 */
++        // IJON_DIST(nstrips, 1000000); /* PATCHID: 35616 */
++        // IJON_DIST(offset, TIFFGetFileSize(tif)); /* PATCHID: 32523 */
++        // IJON_MAX(stripbytes * (nstrips - 1)); /* PATCHID: 35243 */
+         MAGMA_LOG("TIF014", MAGMA_AND(tif->tif_mode == O_RDONLY, \
+ 	        MAGMA_AND(nstrips > 1000000, \
+ 	        MAGMA_OR(offset >= TIFFGetFileSize(tif), \
+diff --git a/libtiff/tif_dirwrite.c b/libtiff/tif_dirwrite.c
+index 1e111fd0..8c927429 100644
+--- a/libtiff/tif_dirwrite.c
++++ b/libtiff/tif_dirwrite.c
+@@ -2102,6 +2102,7 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 	if (n==3)
+ 	{
+ #ifdef MAGMA_ENABLE_CANARIES
++        IJON_DIST(tif->tif_dir.td_transferfunction[2], NULL); /* PATCHID: 88200 */
+ 		MAGMA_LOG("TIF009", tif->tif_dir.td_transferfunction[2] == NULL);
+ #endif
+ #ifdef MAGMA_ENABLE_FIXES
+@@ -2115,6 +2116,7 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 	if (n==2)
+ 	{
+ #ifdef MAGMA_ENABLE_CANARIES
++        IJON_DIST(tif->tif_dir.td_transferfunction[1], NULL); /* PATCHID: 42136 */
+ 		MAGMA_LOG("TIF009", tif->tif_dir.td_transferfunction[1] == NULL);
+ #endif
+ #ifdef MAGMA_ENABLE_FIXES
+diff --git a/libtiff/tif_luv.c b/libtiff/tif_luv.c
+index fcdce0ba..56dc040b 100644
+--- a/libtiff/tif_luv.c
++++ b/libtiff/tif_luv.c
+@@ -1578,6 +1578,8 @@ LogLuvClose(TIFF* tif)
+             td->td_sampleformat = SAMPLEFORMAT_INT;
+         }
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_MIN(sp->encoder_state); /* PATCHID: 59657 */
++    // IJON_DIST(sp->encoder_state, 0); /* PATCHID: 32130 */
+     MAGMA_LOG("TIF005", sp->encoder_state == 0);
+ #endif
+ }
+diff --git a/libtiff/tif_lzw.c b/libtiff/tif_lzw.c
+index 1448efa5..26112764 100644
+--- a/libtiff/tif_lzw.c
++++ b/libtiff/tif_lzw.c
+@@ -750,6 +750,8 @@ LZWDecodeCompat(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 			tp = op + len;
+ 			do {
+ #ifdef MAGMA_ENABLE_CANARIES
++               //  IJON_MAX(op); /* PATCHID: 64614 */
++               //  IJON_MIN(tp); /* PATCHID: 19959 */
+ 				MAGMA_LOG("TIF010", tp <= op); // or use == instead of <= so the bug is reported once only
+ #endif
+ 				*--tp = codep->value;
+diff --git a/libtiff/tif_next.c b/libtiff/tif_next.c
+index a64419cf..94ed073e 100644
+--- a/libtiff/tif_next.c
++++ b/libtiff/tif_next.c
+@@ -129,6 +129,8 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ #endif
+                 {
+ #ifdef MAGMA_ENABLE_CANARIES
++                    // IJON_MAX(op_offset); /* PATCHID: 33153 */
++                    // IJON_MIN(scanline); /* PATCHID: 8740 */
+                     MAGMA_LOG("TIF008", op_offset >= scanline);
+ #endif
+ 					SETPIXEL(op, grey);
+diff --git a/libtiff/tif_pixarlog.c b/libtiff/tif_pixarlog.c
+index 528de93e..0f4267a3 100644
+--- a/libtiff/tif_pixarlog.c
++++ b/libtiff/tif_pixarlog.c
+@@ -807,6 +807,8 @@ PixarLogDecode(TIFF* tif, uint8_t* op, tmsize_t occ, uint16_t s)
+ 	}
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++   //  IJON_MAX((tmsize_t)sp->stream.avail_out); /* PATCHID: 3706 */
++   //  IJON_MIN(sp->tbuf_size); /* PATCHID: 22283 */
+ 	MAGMA_LOG("TIF002", (tmsize_t)sp->stream.avail_out > sp->tbuf_size);
+ #endif
+ 	do {
+@@ -1282,6 +1284,8 @@ PixarLogClose(TIFF* tif)
+             td->td_sampleformat = SAMPLEFORMAT_UINT;
+         }
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_MIN(sp->state & PLSTATE_INIT); /* PATCHID: 66204 */
++    // IJON_DIST(sp->state & PLSTATE_INIT, 0); /* PATCHID: 78755 */
+     MAGMA_LOG("TIF006", (sp->state&PLSTATE_INIT) == 0);
+ #endif
+ }
+diff --git a/libtiff/tif_predict.c b/libtiff/tif_predict.c
+index 1f4001d4..79b3ed14 100644
+--- a/libtiff/tif_predict.c
++++ b/libtiff/tif_predict.c
+@@ -291,6 +291,8 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc%stride), 1); /* PATCHID: 45850 */
++    // IJON_MAX(cc%stride); /* PATCHID: 35043 */
+     MAGMA_LOG("TIF001", (cc%stride)!=0);
+ #endif
+ 
+@@ -365,6 +367,8 @@ horAcc16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST(cc%(2*stride), 1); /* PATCHID: 79103 */
++    // IJON_MAX(cc%(2*stride)); /* PATCHID: 60454 */
+     MAGMA_LOG("TIF001", (cc%(2*stride))!=0);
+ #endif
+ 
+@@ -405,6 +409,8 @@ horAcc32(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST(cc%(4*stride), 1); /* PATCHID: 6804 */
++    // IJON_MAX(cc%(4*stride)); /* PATCHID: 35084 */
+     MAGMA_LOG("TIF001", (cc%(4*stride))!=0);
+ #endif
+ 
+@@ -440,6 +446,8 @@ fpAcc(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc%(bps*stride)), 1); /* PATCHID: 63779 */
++    // IJON_MAX(cc%(bps*stride)); /* PATCHID: 24691 */
+     MAGMA_LOG("TIF001", (cc%(bps*stride))!=0);
+ #endif
+ 
+@@ -516,6 +524,8 @@ PredictorDecodeTile(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+         }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++        // IJON_DIST(occ0 % rowsize, 1); /* PATCHID: 79960 */
++        // IJON_MAX(occ0 % rowsize); /* PATCHID: 86733 */
+         MAGMA_LOG("TIF001", (occ0%rowsize)!=0);
+ #endif
+ 
+@@ -548,6 +558,8 @@ horDiff8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc%stride), 1); /* PATCHID: 69694 */
++    // IJON_MAX(cc%stride); /* PATCHID: 96678 */
+     MAGMA_LOG("TIF001", (cc%stride)!=0);
+ #endif
+ 
+@@ -608,6 +620,8 @@ horDiff16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc%(2*stride)), 1); /* PATCHID: 80620 */
++    // IJON_MAX(cc%(2*stride)); /* PATCHID: 38434 */
+     MAGMA_LOG("TIF001", (cc%(2*stride))!=0);
+ #endif
+ 
+@@ -653,6 +667,8 @@ horDiff32(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc%(4*stride)), 1); /* PATCHID: 11600 */
++    // IJON_MAX(cc%(4*stride)); /* PATCHID: 12548 */
+     MAGMA_LOG("TIF001", (cc%(4*stride))!=0);
+ #endif
+ 
+@@ -703,6 +719,8 @@ fpDiff(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc%(bps*stride)), 1); /* PATCHID: 73535 */
++    // IJON_MAX(cc%(bps*stride)); /* PATCHID: 61717 */
+     MAGMA_LOG("TIF001", (cc%(bps*stride))!=0);
+ #endif
+ 
+@@ -788,6 +806,8 @@ PredictorEncodeTile(TIFF* tif, uint8_t* bp0, tmsize_t cc0, uint16_t s)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_DIST((cc0%rowsize), 1); /* PATCHID: 65804 */
++    // IJON_MAX(cc0%rowsize); /* PATCHID: 50735 */
+     MAGMA_LOG("TIF001", (cc0%rowsize)!=0);
+ #endif
+ 
+diff --git a/libtiff/tif_read.c b/libtiff/tif_read.c
+index 1c7045e2..d0db2384 100644
+--- a/libtiff/tif_read.c
++++ b/libtiff/tif_read.c
+@@ -490,6 +490,8 @@ static tmsize_t TIFFReadEncodedStripGetStripSize(TIFF* tif, uint32_t strip, uint
+     stripsperplane=((td->td_imagelength+rowsperstrip-1)/rowsperstrip);
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++    // IJON_MIN(stripsperplane); /* PATCHID: 48246 */
++    // IJON_DIST(stripsperplane, 0); /* PATCHID: 74621 */
+     MAGMA_LOG("TIF003", stripsperplane == 0);
+ #endif
+ 	stripinplane=(strip%stripsperplane);

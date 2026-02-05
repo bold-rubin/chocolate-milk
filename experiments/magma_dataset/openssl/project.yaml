@@ -1,0 +1,14 @@
+language: c
+shellphish_project_name: openssl
+shellphish_harness_paths:
+  - "asn1"
+  - "asn1parse"
+  - "bignum"
+  - "bndiv"
+  - "client"
+  - "cms"
+  - "conf"
+  - "crl"
+  - "ct"
+  - "server"
+  - "x509"

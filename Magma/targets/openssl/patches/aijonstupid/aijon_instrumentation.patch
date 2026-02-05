@@ -1,0 +1,920 @@
+diff --git a/crypto/asn1/a_d2i_fp.c b/crypto/asn1/a_d2i_fp.c
+index f152f348aa..cfebb6ecd6 100644
+--- a/crypto/asn1/a_d2i_fp.c
++++ b/crypto/asn1/a_d2i_fp.c
+@@ -130,6 +130,7 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
+     ERR_set_mark();
+     for (;;) {
+         diff = len - off;
++
+         if (want >= diff) {
+             want -= diff;
+ 
+diff --git a/crypto/asn1/a_int.c b/crypto/asn1/a_int.c
+index bfab1bb2c2..4368a3c2f0 100644
+--- a/crypto/asn1/a_int.c
++++ b/crypto/asn1/a_int.c
+@@ -147,6 +147,7 @@ static size_t i2c_ibuf(const unsigned char *b, size_t blen, int neg,
+     else if (!neg)
+         memcpy(p, b, (unsigned int)blen);
+     else {
++IJON_CTX(84); /* PATCHID:73950 */
+         /* Begin at the end of the encoding */
+         const unsigned char *n = b + blen - 1;
+         p += blen - 1;
+@@ -165,6 +166,9 @@ static size_t i2c_ibuf(const unsigned char *b, size_t blen, int neg,
+             *(p--) = 0;
+             n--;
+             i--;
++IJON_SET((int)i); /* PATCHID:73162 */
++IJON_MIN((unsigned long long)i); /* PATCHID:72246 */
++IJON_INC((int)i); /* PATCHID:71470 */
+ #ifdef MAGMA_ENABLE_CANARIES
+             /**
+              * The value of `i` determines how many more iterations this loop
+@@ -182,6 +186,7 @@ static size_t i2c_ibuf(const unsigned char *b, size_t blen, int neg,
+         for (; i > 0; i--)
+             *(p--) = *(n--) ^ 0xff;
+     }
++IJON_CTX(136); /* PATCHID:70598 */
+ #endif
+ 
+     *pp += ret;
+diff --git a/crypto/asn1/a_type.c b/crypto/asn1/a_type.c
+index 280e09883c..b944d91cfb 100644
+--- a/crypto/asn1/a_type.c
++++ b/crypto/asn1/a_type.c
+@@ -66,6 +66,8 @@ int ASN1_TYPE_cmp(const ASN1_TYPE *a, const ASN1_TYPE *b)
+ 
+     if (!a || !b || a->type != b->type)
+         return -1;
++IJON_CMP((unsigned long long)a->type, (unsigned long long)V_ASN1_BOOLEAN); /* PATCHID:75211 */
++IJON_SET((int)a->type); /* PATCHID:74400 */
+ 
+     switch (a->type) {
+     case V_ASN1_OBJECT:
+@@ -106,6 +108,7 @@ int ASN1_TYPE_cmp(const ASN1_TYPE *a, const ASN1_TYPE *b)
+     default:
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", a->type == V_ASN1_BOOLEAN);
++IJON_INC((int)(a->type == V_ASN1_BOOLEAN)); /* PATCHID:74252 */
+ #endif
+         result = ASN1_STRING_cmp((ASN1_STRING *)a->value.ptr,
+                                  (ASN1_STRING *)b->value.ptr);
+diff --git a/crypto/bn/bn_gf2m.c b/crypto/bn/bn_gf2m.c
+index 25673d6d24..d307a17cfb 100644
+--- a/crypto/bn/bn_gf2m.c
++++ b/crypto/bn/bn_gf2m.c
+@@ -622,6 +622,7 @@ static int BN_GF2m_mod_inv_vartime(BIGNUM *r, const BIGNUM *a,
+     {
+         int i;
+         int ubits = BN_num_bits(u);
++IJON_MIN((unsigned long long)ubits); /* PATCHID:47611 */
+         int vbits = BN_num_bits(v); /* v is copy of p */
+         int top = p->top;
+         BN_ULONG *udp, *bdp, *vdp, *cdp;
+@@ -668,10 +669,13 @@ static int BN_GF2m_mod_inv_vartime(BIGNUM *r, const BIGNUM *a,
+                 udp[i] = u0 >> 1;
+                 bdp[i] = b0 >> 1;
+                 ubits--;
++IJON_MIN((unsigned long long)ubits); /* PATCHID:46864 */
+             }
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+             if (ubits <= BN_BITS2) {
++IJON_CMP((unsigned long long)udp[0], 1ULL); /* PATCHID:45858 */
++IJON_CMP((unsigned long long)udp[0], 0ULL); /* PATCHID:45049 */
+                 if (udp[0] == 0) /* poly was reducible */
+                     goto err;
+                 if (udp[0] == 1)
+@@ -687,6 +691,7 @@ static int BN_GF2m_mod_inv_vartime(BIGNUM *r, const BIGNUM *a,
+ #endif
+ 
+             if (ubits < vbits) {
++IJON_DIST((long long)ubits, (long long)vbits); /* PATCHID:44552 */
+                 i = ubits;
+                 ubits = vbits;
+                 vbits = i;
+@@ -703,6 +708,7 @@ static int BN_GF2m_mod_inv_vartime(BIGNUM *r, const BIGNUM *a,
+             }
+             for (i = 0; i < top; i++) {
+                 udp[i] ^= vdp[i];
++IJON_SET((int)udp[0]); /* PATCHID:43945 */
+                 bdp[i] ^= cdp[i];
+             }
+             if (ubits == vbits) {
+@@ -712,6 +718,7 @@ static int BN_GF2m_mod_inv_vartime(BIGNUM *r, const BIGNUM *a,
+                 while ((ul = udp[utop]) == 0 && utop)
+                     utop--;
+                 ubits = utop * BN_BITS2 + BN_num_bits_word(ul);
++IJON_MIN((unsigned long long)ubits); /* PATCHID:42941 */
+             }
+         }
+         bn_correct_top(b);
+diff --git a/crypto/bn/bn_local.h b/crypto/bn/bn_local.h
+index d9cdecc110..83d7e4eff2 100644
+--- a/crypto/bn/bn_local.h
++++ b/crypto/bn/bn_local.h
+@@ -663,6 +663,8 @@ BIGNUM *int_bn_mod_inverse(BIGNUM *in,
+ 
+ static ossl_inline BIGNUM *bn_expand(BIGNUM *a, int bits)
+ {
++IJON_DIST((long long)bits, (long long)(INT_MAX - BN_BITS2 + 1)); /* PATCHID:41044 */
++IJON_MAX((unsigned long long)bits); /* PATCHID:40172 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (bits > (INT_MAX - BN_BITS2 + 1))
+         return NULL;
+@@ -676,6 +678,7 @@ static ossl_inline BIGNUM *bn_expand(BIGNUM *a, int bits)
+     MAGMA_LOG("%MAGMA_BUG%",bits > (INT_MAX - BN_BITS2 + 1));
+ #endif
+     return ((((((bits+BN_BITS2-1))/BN_BITS2)) <= (a)->dmax)?(a):bn_expand2((a),(bits+BN_BITS2-1)/BN_BITS2));
++IJON_SET((int)((bits+BN_BITS2-1)/BN_BITS2)); /* PATCHID:39183 */
+ #endif
+ }
+ 
+diff --git a/crypto/evp/encode.c b/crypto/evp/encode.c
+index b3f2dca109..1a41fd015d 100644
+--- a/crypto/evp/encode.c
++++ b/crypto/evp/encode.c
+@@ -168,6 +168,7 @@ int EVP_EncodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
+     *outl = 0;
+     if (inl <= 0)
+         return 0;
++IJON_MAX((unsigned long long)inl); /* PATCHID:69097 */
+     OPENSSL_assert(ctx->length <= (int)sizeof(ctx->enc_data));
+ #ifdef MAGMA_ENABLE_FIXES
+     if (ctx->length - ctx->num > inl) {
+@@ -180,6 +181,7 @@ int EVP_EncodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
+     MAGMA_LOG("%MAGMA_BUG%", INT_MAX - inl < ctx->num);
+ #endif
+     if ((ctx->num + inl) < ctx->length) {
++
+ #endif
+         memcpy(&(ctx->enc_data[ctx->num]), in, inl);
+         ctx->num += inl;
+@@ -206,6 +208,8 @@ int EVP_EncodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
+         inl -= ctx->length;
+         out += j;
+         total += j;
++IJON_DIST((long long)total, (long long)INT_MAX); /* PATCHID:67837 */
++IJON_MAX((unsigned long long)total); /* PATCHID:67380 */
+         if ((ctx->flags & EVP_ENCODE_CTX_NO_NEWLINES) == 0) {
+             *(out++) = '\n';
+             total++;
+@@ -213,6 +217,7 @@ int EVP_EncodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
+         *out = '\0';
+     }
+     if (total > INT_MAX) {
++
+         /* Too much output data! */
+         *outl = 0;
+         return 0;
+diff --git a/crypto/mdc2/mdc2dgst.c b/crypto/mdc2/mdc2dgst.c
+index 339be4adc9..fb05ee61de 100644
+--- a/crypto/mdc2/mdc2dgst.c
++++ b/crypto/mdc2/mdc2dgst.c
+@@ -47,7 +47,10 @@ int MDC2_Update(MDC2_CTX *c, const unsigned char *in, size_t len)
+     size_t i, j;
+ 
+     i = c->num;
++IJON_MAX((unsigned long long)len); /* PATCHID:78029 */
++IJON_SET((int)i); /* PATCHID:77862 */
+     if (i != 0) {
++IJON_CTX(401); /* PATCHID:76945 */
+ #ifdef MAGMA_ENABLE_FIXES
+         if (len < MDC2_BLOCK - i) {
+ #else
+@@ -55,6 +58,7 @@ int MDC2_Update(MDC2_CTX *c, const unsigned char *in, size_t len)
+         MAGMA_LOG("%MAGMA_BUG%", SIZE_MAX - len < i);
+ #endif
+         if (i + len < MDC2_BLOCK) {
++IJON_DIST((long long)len, (long long)(SIZE_MAX - i)); /* PATCHID:76124 */
+ #endif
+             /* partial block */
+             memcpy(&(c->data[i]), in, len);
+diff --git a/crypto/pkcs7/pk7_doit.c b/crypto/pkcs7/pk7_doit.c
+index b51a678a98..da5c669606 100644
+--- a/crypto/pkcs7/pk7_doit.c
++++ b/crypto/pkcs7/pk7_doit.c
+@@ -247,13 +247,21 @@ BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)
+ #endif
+ 
+     i = OBJ_obj2nid(p7->type);
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_data); /* PATCHID:65862 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_digest); /* PATCHID:65766 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_enveloped); /* PATCHID:65067 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_signedAndEnveloped); /* PATCHID:64535 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_signed); /* PATCHID:63964 */
+     p7->state = PKCS7_S_HEADER;
++IJON_SET((int)i); /* PATCHID:63956 */
+ 
+     switch (i) {
+     case NID_pkcs7_signed:
++IJON_CTX((unsigned long long)86); /* PATCHID:63339 */
+         md_sk = p7->d.sign->md_algs;
+         os = PKCS7_get_octet_string(p7->d.sign->contents);
+         break;
++
+     case NID_pkcs7_signedAndEnveloped:
+         rsk = p7->d.signed_and_enveloped->recipientinfo;
+         md_sk = p7->d.signed_and_enveloped->md_algs;
+@@ -264,6 +272,7 @@ BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)
+             goto err;
+         }
+         break;
++
+     case NID_pkcs7_enveloped:
+         rsk = p7->d.enveloped->recipientinfo;
+         xalg = p7->d.enveloped->enc_data->algorithm;
+@@ -273,17 +282,21 @@ BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)
+             goto err;
+         }
+         break;
++
+     case NID_pkcs7_digest:
+         xa = p7->d.digest->md;
+         os = PKCS7_get_octet_string(p7->d.digest->contents);
+         break;
++
+     case NID_pkcs7_data:
+         break;
++
+     default:
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_UNSUPPORTED_CONTENT_TYPE);
+         goto err;
+     }
+ 
++
+     for (i = 0; i < sk_X509_ALGOR_num(md_sk); i++)
+         if (!pkcs7_bio_add_digest(&out, sk_X509_ALGOR_value(md_sk, i), p7_ctx))
+             goto err;
+@@ -437,9 +450,12 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+ #endif
+ #endif
+     i = OBJ_obj2nid(p7->type);
++IJON_SET((int)i); /* PATCHID:59887 */
++IJON_SET((int) i); /* PATCHID:55757 */
+     p7->state = PKCS7_S_HEADER;
+ 
+     switch (i) {
++IJON_CTX((unsigned long long)219); /* PATCHID:59729 */
+     case NID_pkcs7_signed:
+         /*
+          * p7->d.sign->contents is a PKCS7 structure consisting of a contentType
+@@ -454,6 +470,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+         }
+         md_sk = p7->d.sign->md_algs;
+         break;
++IJON_CTX((unsigned long long)47); /* PATCHID:59156 */
+     case NID_pkcs7_signedAndEnveloped:
+         rsk = p7->d.signed_and_enveloped->recipientinfo;
+         md_sk = p7->d.signed_and_enveloped->md_algs;
+@@ -477,6 +494,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+         }
+         (void)ERR_pop_to_mark();
+         break;
++IJON_CTX((unsigned long long)223); /* PATCHID:58553 */
+     case NID_pkcs7_enveloped:
+         rsk = p7->d.enveloped->recipientinfo;
+         enc_alg = p7->d.enveloped->enc_data->algorithm;
+@@ -505,6 +523,8 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+ 
+     /* Detached content must be supplied via in_bio instead. */
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_CMP((unsigned long long)(in_bio == NULL), (unsigned long long)1); /* PATCHID:57632 */
++IJON_CMP((unsigned long long)(data_body == NULL), (unsigned long long)1); /* PATCHID:57109 */
+     if (data_body == NULL && in_bio == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_NO_CONTENT);
+         goto err;
+@@ -517,6 +537,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+     /* We will be checking the signature */
+     if (md_sk != NULL) {
+         for (i = 0; i < sk_X509_ALGOR_num(md_sk); i++) {
++IJON_INC((int) i); /* PATCHID:55042 */
+             xa = sk_X509_ALGOR_value(md_sk, i);
+             if ((btmp = BIO_new(BIO_f_md())) == NULL) {
+                 ERR_raise(ERR_LIB_PKCS7, ERR_R_BIO_LIB);
+@@ -567,6 +588,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+ 
+         if (pcert) {
+             for (i = 0; i < sk_PKCS7_RECIP_INFO_num(rsk); i++) {
++IJON_INC((int) i); /* PATCHID:54809 */
+                 ri = sk_PKCS7_RECIP_INFO_value(rsk, i);
+                 if (!pkcs7_cmp_ri(ri, pcert))
+                     break;
+@@ -586,6 +608,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+              * defence against MMA timing attacks.
+              */
+             for (i = 0; i < sk_PKCS7_RECIP_INFO_num(rsk); i++) {
++IJON_INC((int) i); /* PATCHID:54609 */
+                 ri = sk_PKCS7_RECIP_INFO_value(rsk, i);
+                 ri->ctx = p7_ctx;
+                 if (pkcs7_decrypt_rinfo(&ek, &eklen, ri, pkey,
+@@ -605,10 +628,12 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+         BIO_get_cipher_ctx(etmp, &evp_ctx);
+         if (EVP_CipherInit_ex(evp_ctx, cipher, NULL, NULL, NULL, 0) <= 0)
+             goto err;
++IJON_SET(len); /* PATCHID:56124 */
+         if (EVP_CIPHER_asn1_to_param(evp_ctx, enc_alg->parameter) < 0)
+             goto err;
+         /* Generate random key as MMA defence */
+         len = EVP_CIPHER_CTX_get_key_length(evp_ctx);
++IJON_SET((int) len); /* PATCHID:54115 */
+         if (len <= 0)
+             goto err;
+         tkeylen = (size_t)len;
+@@ -624,6 +649,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+         }
+ 
+         if (eklen != EVP_CIPHER_CTX_get_key_length(evp_ctx)) {
++IJON_CMP((unsigned long long) eklen, (unsigned long long) len); /* PATCHID:53387 */
+             /*
+              * Some S/MIME clients don't use the same key and effective key
+              * length. The key length is determined by the size of the
+@@ -774,6 +800,12 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
+     }
+ 
+     i = OBJ_obj2nid(p7->type);
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_digest); /* PATCHID:39157 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_signed); /* PATCHID:38346 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_enveloped); /* PATCHID:38080 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_signedAndEnveloped); /* PATCHID:37634 */
++IJON_CMP((unsigned long long)i, (unsigned long long)NID_pkcs7_data); /* PATCHID:37118 */
++IJON_SET((int)i); /* PATCHID:36402 */
+     p7->state = PKCS7_S_HEADER;
+ 
+     switch (i) {
+@@ -831,8 +863,10 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
+         goto err;
+     }
+ 
++IJON_SET((int)(si_sk != NULL)); /* PATCHID:35892 */
+     if (si_sk != NULL) {
+         for (i = 0; i < sk_PKCS7_SIGNER_INFO_num(si_sk); i++) {
++IJON_INC((int)i); /* PATCHID:35563 */
+             si = sk_PKCS7_SIGNER_INFO_value(si_sk, i);
+             if (si->pkey == NULL)
+                 continue;
+@@ -907,6 +941,8 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
+                 goto err;
+             }
+             contlen = BIO_get_mem_data(btmp, &cont);
++IJON_MIN((unsigned long long)contlen); /* PATCHID:35343 */
++IJON_MAX((unsigned long long)contlen); /* PATCHID:35258 */
+             /*
+              * Mark the BIO read only then we can use its copy of the data
+              * instead of making an extra copy.
+@@ -1002,36 +1038,46 @@ int PKCS7_dataVerify(X509_STORE *cert_store, X509_STORE_CTX *ctx, BIO *bio,
+ #endif
+     if (PKCS7_type_is_signed(p7)) {
+         cert = p7->d.sign->cert;
++
++
+     } else if (PKCS7_type_is_signedAndEnveloped(p7)) {
+         cert = p7->d.signed_and_enveloped->cert;
++
+     } else {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_WRONG_PKCS7_TYPE);
+         goto err;
+     }
++
+     /* XXXXXXXXXXXXXXXXXXXXXXX */
+     ias = si->issuer_and_serial;
+ 
+     x509 = X509_find_by_issuer_and_serial(cert, ias->issuer, ias->serial);
+ 
++
+     /* were we able to find the cert in passed to us */
+     if (x509 == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_UNABLE_TO_FIND_CERTIFICATE);
+         goto err;
+     }
+ 
++
+     /* Lets verify */
+     if (!X509_STORE_CTX_init(ctx, cert_store, x509, cert)) {
+         ERR_raise(ERR_LIB_PKCS7, ERR_R_X509_LIB);
+         goto err;
+     }
++
+     X509_STORE_CTX_set_purpose(ctx, X509_PURPOSE_SMIME_SIGN);
+     i = X509_verify_cert(ctx);
++IJON_MAX((unsigned long long)i); /* PATCHID:30283 */
+     if (i <= 0) {
+         ERR_raise(ERR_LIB_PKCS7, ERR_R_X509_LIB);
+         goto err;
+     }
+ 
++
+     return PKCS7_signatureVerify(bio, p7, si, x509);
++
+  err:
+     return ret;
+ }
+diff --git a/crypto/rsa/rsa_ameth.c b/crypto/rsa/rsa_ameth.c
+index 46b3f1fce2..2adef21eb2 100644
+--- a/crypto/rsa/rsa_ameth.c
++++ b/crypto/rsa/rsa_ameth.c
+@@ -621,10 +621,13 @@ static int rsa_item_verify(EVP_MD_CTX *ctx, const ASN1_ITEM *it,
+     if (ossl_rsa_pss_to_ctx(ctx, NULL, sigalg, pkey) > 0) {
+ #else
+     int magma_int = ossl_rsa_pss_to_ctx(ctx, NULL, sigalg, pkey);
++IJON_MIN((unsigned long long)(-magma_int)); /* PATCHID:42936 */
++IJON_SET((int)magma_int); /* PATCHID:42677 */
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", magma_int < 0);
+ #endif
+     if (magma_int) {
++IJON_INC((int)(magma_int < 0)); /* PATCHID:41784 */
+ #endif
+         /* Carry on */
+         return 2;
+diff --git a/crypto/x509/x509_obj.c b/crypto/x509/x509_obj.c
+index c2f162d4bd..ff667f3f23 100644
+--- a/crypto/x509/x509_obj.c
++++ b/crypto/x509/x509_obj.c
+@@ -62,6 +62,7 @@ char *X509_NAME_oneline(const X509_NAME *a, char *buf, int len)
+     len--;                      /* space for '\0' */
+     l = 0;
+     for (i = 0; i < sk_X509_NAME_ENTRY_num(a->entries); i++) {
++IJON_INC((int)i); /* PATCHID:80470 */
+         ne = sk_X509_NAME_ENTRY_value(a->entries, i);
+         n = OBJ_obj2nid(ne->object);
+         if ((n == NID_undef) || ((s = OBJ_nid2sn(n)) == NULL)) {
+@@ -72,12 +73,15 @@ char *X509_NAME_oneline(const X509_NAME *a, char *buf, int len)
+ 
+         type = ne->value->type;
+         num = ne->value->length;
++IJON_CMP((unsigned long long)num, 1024); /* PATCHID:79719 */
++IJON_MAX((unsigned long long)num); /* PATCHID:79138 */
+         if (num > NAME_ONELINE_MAX) {
+             ERR_raise(ERR_LIB_X509, X509_R_NAME_TOO_LONG);
+             goto end;
+         }
+         q = ne->value->data;
+ #ifdef CHARSET_EBCDIC
++IJON_SET((int)type); /* PATCHID:78557 */
+         if (type == V_ASN1_GENERALSTRING ||
+             type == V_ASN1_VISIBLESTRING ||
+             type == V_ASN1_PRINTABLESTRING ||
+diff --git a/crypto/x509/x509_req.c b/crypto/x509/x509_req.c
+index 213f359221..bbe96f7b7d 100644
+--- a/crypto/x509/x509_req.c
++++ b/crypto/x509/x509_req.c
+@@ -31,6 +31,7 @@ X509_REQ *X509_to_X509_REQ(X509 *x, EVP_PKEY *pkey, const EVP_MD *md)
+         ERR_raise(ERR_LIB_X509, ERR_R_MALLOC_FAILURE);
+         goto err;
+     }
++IJON_INC((unsigned long long)(ret != NULL)); /* PATCHID:84273 */
+ 
+     ri = &ret->req_info;
+ 
+@@ -38,26 +39,33 @@ X509_REQ *X509_to_X509_REQ(X509 *x, EVP_PKEY *pkey, const EVP_MD *md)
+     ri->version->data = OPENSSL_malloc(1);
+     if (ri->version->data == NULL)
+         goto err;
++IJON_INC((unsigned long long)(ri->version->data != NULL)); /* PATCHID:84080 */
+     ri->version->data[0] = 0;   /* version == 0 */
+ 
+     if (!X509_REQ_set_subject_name(ret, X509_get_subject_name(x)))
+         goto err;
++IJON_INC(1); /* PATCHID:83249 */
+ 
+     pktmp = X509_get0_pubkey(x);
++IJON_SET((int)(pktmp != NULL)); /* PATCHID:82772 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (pktmp == NULL)
+         goto err;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%",pktmp == NULL);
++IJON_INC((unsigned long long)(pktmp == NULL)); /* PATCHID:82191 */
+ #endif
+     i = X509_REQ_set_pubkey(ret, pktmp);
++IJON_SET(i); /* PATCHID:81389 */
+     if (!i)
+         goto err;
+ 
+     if (pkey != NULL) {
++IJON_SET((int)(pkey != NULL)); /* PATCHID:81207 */
+         if (!X509_REQ_sign(ret, pkey, md))
+             goto err;
++IJON_INC(1); /* PATCHID:81009 */
+     }
+     return ret;
+  err:
+diff --git a/crypto/x509/x509_vfy.c b/crypto/x509/x509_vfy.c
+index afa2130d2b..09af475f5d 100644
+--- a/crypto/x509/x509_vfy.c
++++ b/crypto/x509/x509_vfy.c
+@@ -1066,9 +1066,12 @@ static int get_crl_sk(X509_STORE_CTX *ctx, X509_CRL **pcrl, X509_CRL **pdcrl,
+     X509 *crl_issuer = NULL, *best_crl_issuer = NULL;
+ 
+     for (i = 0; i < sk_X509_CRL_num(crls); i++) {
++IJON_INC((unsigned long long)i); /* PATCHID:28298 */
+         crl = sk_X509_CRL_value(crls, i);
+         reasons = *preasons;
+         crl_score = get_crl_score(ctx, &crl_issuer, &reasons, crl, x);
++IJON_DIST((long long)crl_score, (long long)best_score); /* PATCHID:27639 */
++IJON_CMP((unsigned long long)crl_score, (unsigned long long)best_score); /* PATCHID:27457 */
+ #ifdef MAGMA_ENABLE_FIXES
+         if (crl_score < best_score || crl_score == 0)
+ #else
+@@ -1080,6 +1083,7 @@ static int get_crl_sk(X509_STORE_CTX *ctx, X509_CRL **pcrl, X509_CRL **pdcrl,
+         if (crl_score == best_score && best_crl != NULL) {
+ #else
+         if (crl_score == best_score) {
++IJON_CTX((unsigned long long)(best_crl == NULL ? 999 : 1)); /* PATCHID:27070 */
+ #ifdef MAGMA_ENABLE_CANARIES
+             MAGMA_LOG("%MAGMA_BUG%", best_crl == NULL);
+ #endif
+@@ -1099,6 +1103,7 @@ static int get_crl_sk(X509_STORE_CTX *ctx, X509_CRL **pcrl, X509_CRL **pdcrl,
+         best_crl = crl;
+         best_crl_issuer = crl_issuer;
+         best_score = crl_score;
++IJON_INC((unsigned long long)best_score); /* PATCHID:26177 */
+         best_reasons = reasons;
+     }
+ 
+diff --git a/ssl/record/rec_layer_s3.c b/ssl/record/rec_layer_s3.c
+index ebc4f9988c..e1118837c1 100644
+--- a/ssl/record/rec_layer_s3.c
++++ b/ssl/record/rec_layer_s3.c
+@@ -1271,6 +1271,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+     SSL3_BUFFER *rbuf;
+     void (*cb) (const SSL *ssl, int type2, int val) = NULL;
+     int is_tls13 = SSL_IS_TLS13(s);
++IJON_SET((int)is_tls13); /* PATCHID:25525 */
+ 
+     rbuf = &s->rlayer.rbuf;
+ 
+@@ -1305,6 +1306,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+             s->rlayer.handshake_fragment_len--;
+             n++;
+         }
++IJON_INC((int)n); /* PATCHID:25279 */
+         /* move any remaining fragment bytes: */
+         for (k = 0; k < s->rlayer.handshake_fragment_len; k++)
+             s->rlayer.handshake_fragment[k] = *src++;
+@@ -1341,6 +1343,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+      */
+     rr = s->rlayer.rrec;
+     num_recs = RECORD_LAYER_get_numrpipes(&s->rlayer);
++IJON_SET((int)num_recs); /* PATCHID:24781 */
+ 
+     do {
+         /* get new records if necessary */
+@@ -1351,6 +1354,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+                 return ret;
+             }
+             num_recs = RECORD_LAYER_get_numrpipes(&s->rlayer);
++IJON_SET((int)num_recs); /* PATCHID:23891 */
+             if (num_recs == 0) {
+                 /* Shouldn't happen */
+                 SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+@@ -1368,6 +1372,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+         }
+     } while (num_recs == 0);
+     rr = &rr[curr_rec];
++IJON_SET((int)curr_rec); /* PATCHID:23468 */
+ 
+     if (s->rlayer.handshake_fragment_len > 0
+             && SSL3_RECORD_get_type(rr) != SSL3_RT_HANDSHAKE
+@@ -1409,6 +1414,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+         || (SSL3_RECORD_get_type(rr) == SSL3_RT_CHANGE_CIPHER_SPEC
+             && type == SSL3_RT_HANDSHAKE && recvd_type != NULL
+             && !is_tls13)) {
++IJON_SET((int)(!is_tls13)); /* PATCHID:23256 */
+         /*
+          * SSL3_RT_APPLICATION_DATA or
+          * SSL3_RT_HANDSHAKE or
+@@ -1435,6 +1441,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+             *recvd_type = SSL3_RECORD_get_type(rr);
+ 
+         if (len == 0) {
++IJON_SET((int)(len == 0)); /* PATCHID:22340 */
+             /*
+              * Mark a zero length record as read. This ensures multiple calls to
+              * SSL_read() with a zero length buffer will eventually cause
+@@ -1451,11 +1458,13 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+                 n = SSL3_RECORD_get_length(rr);
+             else
+                 n = len - totalbytes;
++IJON_MIN((unsigned long long)(len - totalbytes)); /* PATCHID:22127 */
+ 
+             memcpy(buf, &(rr->data[rr->off]), n);
+             buf += n;
+ #ifdef MAGMA_ENABLE_FIXES
+             if (peek) {
++IJON_SET((int)peek); /* PATCHID:21208 */
+                 /* Mark any zero length record as consumed CVE-2016-6305 */
+                 if (SSL3_RECORD_get_length(rr) == 0)
+                     SSL3_RECORD_set_read(rr);
+@@ -1467,6 +1476,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+                                           !SSL3_RECORD_is_read(rr))));
+ #endif
+             if (!peek) {
++IJON_SET((int)(!peek)); /* PATCHID:21178 */
+ #endif
+                 if (s->options & SSL_OP_CLEANSE_PLAINTEXT)
+                     OPENSSL_cleanse(&(rr->data[rr->off]), n);
+@@ -1484,9 +1494,11 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+                 rr++;
+             }
+             totalbytes += n;
++IJON_INC((int)totalbytes); /* PATCHID:20928 */
+         } while (type == SSL3_RT_APPLICATION_DATA && curr_rec < num_recs
+                  && totalbytes < len);
+         if (totalbytes == 0) {
++IJON_CMP((unsigned long long)totalbytes, (unsigned long long)0); /* PATCHID:19951 */
+             /* We must have read empty records. Get more data */
+             goto start;
+         }
+diff --git a/ssl/statem/extensions_srvr.c b/ssl/statem/extensions_srvr.c
+index 2134fe4549..89d7202d16 100644
+--- a/ssl/statem/extensions_srvr.c
++++ b/ssl/statem/extensions_srvr.c
+@@ -316,6 +316,7 @@ int tls_parse_ctos_status_request(SSL *s, PACKET *pkt, unsigned int context,
+         return 0;
+     }
+ 
++IJON_CTX(169); /* PATCHID:61655 */
+     if (s->ext.status_type != TLSEXT_STATUSTYPE_ocsp) {
+         /*
+          * We don't know what to do with any other type so ignore it.
+@@ -324,6 +325,7 @@ int tls_parse_ctos_status_request(SSL *s, PACKET *pkt, unsigned int context,
+         return 1;
+     }
+ 
++IJON_CTX(134); /* PATCHID:60988 */
+     if (!PACKET_get_length_prefixed_2 (pkt, &responder_id_list)) {
+         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+         return 0;
+@@ -361,8 +363,10 @@ int tls_parse_ctos_status_request(SSL *s, PACKET *pkt, unsigned int context,
+         sk_OCSP_RESPID_num(s->ext.ocsp.ids) > 0));
+ #endif
+ #endif
++IJON_CTX(117); /* PATCHID:60954 */
+ 
+     while (PACKET_remaining(&responder_id_list) > 0) {
++IJON_CTX(175); /* PATCHID:60571 */
+         OCSP_RESPID *id;
+         PACKET responder_id;
+         const unsigned char *id_data;
+diff --git a/ssl/statem/statem.c b/ssl/statem/statem.c
+index 9e79b27131..5e7d31897e 100644
+--- a/ssl/statem/statem.c
++++ b/ssl/statem/statem.c
+@@ -505,6 +505,9 @@ static void init_read_state_machine(SSL *s)
+ static int grow_init_buf(SSL *s, size_t size) {
+ 
+     size_t msg_offset = (char *)s->init_msg - s->init_buf->data;
++IJON_MAX((unsigned long long)msg_offset); /* PATCHID:48910 */
++IJON_SET((int)msg_offset); /* PATCHID:48271 */
++IJON_SET((int)size); /* PATCHID:48195 */
+ 
+     if (!BUF_MEM_grow_clean(s->init_buf, (int)size))
+         return 0;
+diff --git a/ssl/statem/statem_clnt.c b/ssl/statem/statem_clnt.c
+index 98b020a27f..f8534bd52d 100644
+--- a/ssl/statem/statem_clnt.c
++++ b/ssl/statem/statem_clnt.c
+@@ -2908,12 +2908,15 @@ static int tls_construct_cke_dhe(SSL *s, WPACKET *pkt)
+     int ret = 0;
+ 
+     skey = s->s3.peer_tmp;
++IJON_SET((int)(skey != NULL)); /* PATCHID:7732 */
+     if (skey == NULL) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+         goto err;
+     }
+ 
+     ckey = ssl_generate_pkey(s, skey);
++IJON_CMP((unsigned long long)(ckey == NULL), (unsigned long long)1); /* PATCHID:7645 */
++IJON_SET((int)(ckey != NULL)); /* PATCHID:7452 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (ckey == NULL) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+@@ -2933,6 +2936,7 @@ static int tls_construct_cke_dhe(SSL *s, WPACKET *pkt)
+ 
+     /* Generate encoding of server key */
+     encoded_pub_len = EVP_PKEY_get1_encoded_public_key(ckey, &encoded_pub);
++IJON_SET((int)(encoded_pub_len > 0)); /* PATCHID:6668 */
+     if (encoded_pub_len == 0) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+         EVP_PKEY_free(skey);
+@@ -2945,8 +2949,12 @@ static int tls_construct_cke_dhe(SSL *s, WPACKET *pkt)
+      * as the prime.
+      */
+     prime_len = EVP_PKEY_get_size(ckey);
++IJON_SET((int)prime_len); /* PATCHID:6235 */
+     pad_len = prime_len - encoded_pub_len;
++IJON_MIN((unsigned long long)pad_len); /* PATCHID:5393 */
++IJON_SET((int)pad_len); /* PATCHID:5072 */
+     if (pad_len > 0) {
++IJON_SET((int)(pad_len > 0)); /* PATCHID:4215 */
+         if (!WPACKET_sub_allocate_bytes_u16(pkt, pad_len, &keybytes)) {
+             SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+             goto err;
+@@ -2980,6 +2988,8 @@ static int tls_construct_cke_ecdhe(SSL *s, WPACKET *pkt)
+     }
+ 
+     ckey = ssl_generate_pkey(s, skey);
++IJON_SET((int)(ckey != NULL)); /* PATCHID:3973 */
++
+ #ifdef MAGMA_ENABLE_FIXES
+     if (ckey == NULL) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+@@ -2991,12 +3001,15 @@ static int tls_construct_cke_ecdhe(SSL *s, WPACKET *pkt)
+ #endif
+ 
+     if (ssl_derive(s, ckey, skey, 0) == 0) {
++IJON_INC((int)(ckey != NULL)); /* PATCHID:3351 */
+         /* SSLfatal() already called */
+         goto err;
+     }
+ 
+     /* Generate encoding of client key */
+     encoded_pt_len = EVP_PKEY_get1_encoded_public_key(ckey, &encodedPoint);
++IJON_MAX((unsigned long long)encoded_pt_len); /* PATCHID:2912 */
++IJON_SET((int)encoded_pt_len); /* PATCHID:2308 */
+ 
+     if (encoded_pt_len == 0) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EC_LIB);
+@@ -3004,11 +3017,13 @@ static int tls_construct_cke_ecdhe(SSL *s, WPACKET *pkt)
+     }
+ 
+     if (!WPACKET_sub_memcpy_u8(pkt, encodedPoint, encoded_pt_len)) {
++IJON_INC((int)(encoded_pt_len > 0)); /* PATCHID:1671 */
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+         goto err;
+     }
+ 
+     ret = 1;
++IJON_SET((int)ret); /* PATCHID:819 */
+  err:
+     OPENSSL_free(encodedPoint);
+     EVP_PKEY_free(ckey);
+diff --git a/ssl/statem/statem_dtls.c b/ssl/statem/statem_dtls.c
+index bec4daf3a1..2ae069fdf7 100644
+--- a/ssl/statem/statem_dtls.c
++++ b/ssl/statem/statem_dtls.c
+@@ -441,8 +441,13 @@ static int dtls1_preprocess_fragment(SSL *s, struct hm_header_st *msg_hdr)
+     size_t frag_off, frag_len, msg_len;
+ 
+     msg_len = msg_hdr->msg_len;
++IJON_SET((int)msg_len); /* PATCHID:53049 */
+     frag_off = msg_hdr->frag_off;
++IJON_SET((int)frag_off); /* PATCHID:52428 */
+     frag_len = msg_hdr->frag_len;
++IJON_DIST((long long)(frag_off + frag_len), (long long)msg_len); /* PATCHID:52140 */
++IJON_MAX((unsigned long long)msg_len); /* PATCHID:51495 */
++IJON_SET((int)frag_len); /* PATCHID:50708 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     /* sanity checking */
+@@ -458,6 +463,7 @@ static int dtls1_preprocess_fragment(SSL *s, struct hm_header_st *msg_hdr)
+     MAGMA_LOG("%MAGMA_BUG%", msg_len > dtls1_max_handshake_message_len(s));
+ #endif
+ 
++IJON_CTX((unsigned long long)(s->d1->r_msg_hdr.frag_off == 0 ? 1 : 0)); /* PATCHID:50271 */
+     if (s->d1->r_msg_hdr.frag_off == 0) { /* first fragment */
+         /*
+          * msg_len is limited to 2^24, but is effectively checked against
+@@ -473,7 +479,9 @@ static int dtls1_preprocess_fragment(SSL *s, struct hm_header_st *msg_hdr)
+         s->s3.tmp.message_type = msg_hdr->type;
+         s->d1->r_msg_hdr.type = msg_hdr->type;
+         s->d1->r_msg_hdr.seq = msg_hdr->seq;
++IJON_CTX(428); /* PATCHID:50169 */
+     } else if (msg_len != s->d1->r_msg_hdr.msg_len) {
++IJON_CMP((unsigned long long)msg_len, (unsigned long long)s->d1->r_msg_hdr.msg_len); /* PATCHID:49766 */
+         /*
+          * They must be playing with us! BTW, failure to enforce upper limit
+          * would open possibility for buffer overrun.
+diff --git a/ssl/t1_lib.c b/ssl/t1_lib.c
+index be85b39349..c1057c67b2 100644
+--- a/ssl/t1_lib.c
++++ b/ssl/t1_lib.c
+@@ -1786,6 +1786,7 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+     EVP_CIPHER_CTX *ctx = NULL;
+     SSL_CTX *tctx = s->session_ctx;
+ 
++IJON_SET((int)eticklen); /* PATCHID:19404 */
+     if (eticklen == 0) {
+         /*
+          * The client will accept a ticket but doesn't currently have
+@@ -1794,6 +1795,7 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+         ret = SSL_TICKET_EMPTY;
+         goto end;
+     }
++
+     if (!SSL_IS_TLS13(s) && s->ext.session_secret_cb) {
+         /*
+          * Indicate that the ticket couldn't be decrypted rather than
+@@ -1803,24 +1805,29 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+          */
+         ret = SSL_TICKET_NO_DECRYPT;
+         goto end;
++
+     }
+ 
+     /* Need at least keyname + iv */
+     if (eticklen < TLSEXT_KEYNAME_LENGTH + EVP_MAX_IV_LENGTH) {
+         ret = SSL_TICKET_NO_DECRYPT;
+         goto end;
++
+     }
++IJON_CMP((unsigned long long)eticklen, (unsigned long long)(TLSEXT_KEYNAME_LENGTH + EVP_MAX_IV_LENGTH)); /* PATCHID:17893 */
+ 
+     /* Initialize session ticket encryption and HMAC contexts */
+     hctx = ssl_hmac_new(tctx);
+     if (hctx == NULL) {
+         ret = SSL_TICKET_FATAL_ERR_MALLOC;
+         goto end;
++
+     }
+     ctx = EVP_CIPHER_CTX_new();
+     if (ctx == NULL) {
+         ret = SSL_TICKET_FATAL_ERR_MALLOC;
+         goto end;
++
+     }
+ #ifndef OPENSSL_NO_DEPRECATED_3_0
+     if (tctx->ext.ticket_key_evp_cb != NULL || tctx->ext.ticket_key_cb != NULL)
+@@ -1828,6 +1835,7 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+     if (tctx->ext.ticket_key_evp_cb != NULL)
+ #endif
+     {
++IJON_CTX(356); /* PATCHID:16025 */
+         unsigned char *nctick = (unsigned char *)etick;
+         int rv = 0;
+ 
+@@ -1847,14 +1855,18 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+         if (rv < 0) {
+             ret = SSL_TICKET_FATAL_ERR_OTHER;
+             goto end;
++
+         }
+         if (rv == 0) {
+             ret = SSL_TICKET_NO_DECRYPT;
+             goto end;
++
+         }
+         if (rv == 2)
+             renew_ticket = 1;
++IJON_SET((int)renew_ticket); /* PATCHID:14383 */
+     } else {
++IJON_CTX(90); /* PATCHID:13474 */
+         EVP_CIPHER *aes256cbc = NULL;
+ 
+         /* Check key name matches */
+@@ -1862,6 +1874,7 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+                    TLSEXT_KEYNAME_LENGTH) != 0) {
+             ret = SSL_TICKET_NO_DECRYPT;
+             goto end;
++
+         }
+ 
+         aes256cbc = EVP_CIPHER_fetch(s->ctx->libctx, "AES-256-CBC",
+@@ -1876,19 +1889,23 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+             EVP_CIPHER_free(aes256cbc);
+             ret = SSL_TICKET_FATAL_ERR_OTHER;
+             goto end;
++
+         }
+         EVP_CIPHER_free(aes256cbc);
+         if (SSL_IS_TLS13(s))
+             renew_ticket = 1;
++IJON_SET((int)renew_ticket); /* PATCHID:11806 */
+     }
+     /*
+      * Attempt to process session ticket, first conduct sanity and integrity
+      * checks on ticket.
+      */
+     mlen = ssl_hmac_size(hctx);
++IJON_SET((int)mlen); /* PATCHID:10796 */
+     if (mlen == 0) {
+         ret = SSL_TICKET_FATAL_ERR_OTHER;
+         goto end;
++
+     }
+ 
+     /* Sanity check ticket length: must exceed keyname + IV + HMAC */
+@@ -1897,14 +1914,17 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+         TLSEXT_KEYNAME_LENGTH + EVP_CIPHER_CTX_get_iv_length(ctx) + mlen) {
+ #else
+     if (eticklen < 48) {
++IJON_CMP((unsigned long long)eticklen, (unsigned long long)48); /* PATCHID:8837 */
+ #endif
+         ret = SSL_TICKET_NO_DECRYPT;
+         goto end;
++
+     }
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", eticklen <= TLSEXT_KEYNAME_LENGTH + EVP_CIPHER_CTX_get_iv_length(ctx) + mlen);
+ #endif
+     eticklen -= mlen;
++
+     /* Check HMAC of encrypted ticket */
+     if (ssl_hmac_update(hctx, etick, eticklen) <= 0
+         || ssl_hmac_final(hctx, tick_hmac, NULL, sizeof(tick_hmac)) <= 0) {

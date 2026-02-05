@@ -1,0 +1,116 @@
+diff --git a/png.c b/png.c
+index a656f7521..9290745b6 100644
+--- a/png.c
++++ b/png.c
+@@ -10,7 +10,7 @@
+  * For conditions of distribution and use, see the disclaimer
+  * and license in png.h
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ /* Generate a compiler error if there is an old png.h in the search path. */
+@@ -617,6 +617,8 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 mask,
+ 
+ #ifdef PNG_eXIf_SUPPORTED
+ #ifdef MAGMA_ENABLE_CANARIES
++   // IJON_CMP(info_ptr->eXIf_buf, NULL); /* PATCHID: 86727 */
++   // IJON_DIST(mask & info_ptr->free_me & PNG_FREE_EXIF, 0); /* PATCHID: 81950 */
+    MAGMA_LOG("PNG006", MAGMA_AND(info_ptr->eXIf_buf != NULL, (mask & info_ptr->free_me & PNG_FREE_EXIF) == 0));
+ #endif
+    /* Free any eXIf entry */
+diff --git a/pngrtran.c b/pngrtran.c
+index f54d98f84..f7ec95819 100644
+--- a/pngrtran.c
++++ b/pngrtran.c
+@@ -15,7 +15,7 @@
+  * Transformations that are used in both reading and writing are
+  * in pngtrans.c.
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ #ifdef PNG_ARM_NEON_IMPLEMENTATION
+@@ -1944,8 +1944,10 @@ png_read_transform_info(png_structrp png_ptr, png_inforp info_ptr)
+ #ifdef PNG_READ_EXPAND_SUPPORTED
+    if ((png_ptr->transformations & PNG_EXPAND) != 0)
+    {
++       // IJON_SET(3); /* PATCHID: 72297 */
+       if (info_ptr->color_type == PNG_COLOR_TYPE_PALETTE)
+       {
++          // IJON_SET(4); /* PATCHID: 11338 */
+          /* This check must match what actually happens in
+           * png_do_expand_palette; if it ever checks the tRNS chunk to see if
+           * it is all opaque we must do the same (at present it does not.)
+@@ -1964,6 +1966,7 @@ png_read_transform_info(png_structrp png_ptr, png_inforp info_ptr)
+             png_error (png_ptr, "Palette is NULL in indexed image");
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++         // IJON_CMP(png_ptr->palette, NULL); /* PATCHID: 89030 */
+          MAGMA_LOG("PNG007", png_ptr->palette == NULL);
+ #endif
+       }
+diff --git a/pngrutil.c b/pngrutil.c
+index 8df1dc83d..8c5d028b2 100644
+--- a/pngrutil.c
++++ b/pngrutil.c
+@@ -13,7 +13,7 @@
+  * This file contains routines that are only called from within
+  * libpng itself during the course of reading an image.
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ #ifdef PNG_READ_SUPPORTED
+@@ -989,6 +989,8 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ #endif
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++   // IJON_MAX(num); /* PATCHID: 35616 */
++   // IJON_MIN(max_palette_length); /* PATCHID: 32523 */
+    MAGMA_LOG("PNG003", num > max_palette_length);
+ #endif
+ 
+@@ -3186,6 +3188,7 @@ png_check_chunk_length(png_const_structrp png_ptr, png_uint_32 length)
+          + (png_ptr->interlaced? 6: 0);
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++      // IJON_MAX(row_factor_l); /* PATCHID: 35243 */
+       MAGMA_LOG("PNG001", row_factor_l == ((size_t)1 << (sizeof(png_uint_32) * 8)));
+ #endif
+ 
+@@ -3285,6 +3288,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+        /* The following copies everything for 'display' on passes 0, 2 and 4. */
+        (display == 1 && (pass & 1) != 0)))
+    {
++       IJON_SET(1); /* PATCHID: 88200 */
+       /* Narrow images may have no bits in a pass; the caller should handle
+        * this, but this test is cheap:
+        */
+@@ -3468,6 +3472,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+ 
+       else /* pixel_depth >= 8 */
+       {
++          IJON_SET(2); /* PATCHID: 42136 */
+          unsigned int bytes_to_copy, bytes_to_jump;
+ 
+          /* Validate the depth - it must be a multiple of 8 */
+@@ -3477,6 +3482,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+          pixel_depth >>= 3; /* now in bytes */
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++         IJON_MAX(row_width * pixel_depth); /* PATCHID: 59657 */
+          MAGMA_LOG("PNG004", (row_width * pixel_depth) != (u_int64_t)row_width * pixel_depth);
+ #endif
+          row_width *= pixel_depth;
+@@ -4642,6 +4648,7 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED)
+     /* The input width resulted in an integer overflow, which could
+      * later cause a heap buffer overflow due to a bad allocation size
+      */
++   // IJON_MAX(row_bytes); /* PATCHID: 32130 */
+    MAGMA_LOG("PNG005", row_bytes_check < ((png_ptr->width + 7) & ~((png_uint_32)7)));
+ #endif
+ 

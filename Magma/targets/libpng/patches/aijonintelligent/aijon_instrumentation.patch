@@ -1,0 +1,170 @@
+diff --git a/png.c b/png.c
+index a656f7521..1d7d0d8e3 100644
+--- a/png.c
++++ b/png.c
+@@ -617,8 +617,12 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 mask,
+ 
+ #ifdef PNG_eXIf_SUPPORTED
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_CMP((unsigned long long)(mask & info_ptr->free_me & PNG_FREE_EXIF), (unsigned long long)0); /* PATCHID:14962 */
++IJON_MIN((unsigned long long)(mask & info_ptr->free_me & PNG_FREE_EXIF)); /* PATCHID:14136 */
++IJON_SET((int)(info_ptr->eXIf_buf != NULL)); /* PATCHID:14086 */
+    MAGMA_LOG("PNG006", MAGMA_AND(info_ptr->eXIf_buf != NULL, (mask & info_ptr->free_me & PNG_FREE_EXIF) == 0));
+ #endif
++IJON_CTX((unsigned long long)295); /* PATCHID:13654 */
+    /* Free any eXIf entry */
+    if (((mask & PNG_FREE_EXIF) & info_ptr->free_me) != 0)
+    {
+diff --git a/pngerror.c b/pngerror.c
+index 826585e6c..8c53d02d8 100644
+--- a/pngerror.c
++++ b/pngerror.c
+@@ -943,16 +943,19 @@ png_safe_execute(png_imagep image_in, int (*function)(png_voidp), png_voidp arg)
+    /* Safely execute function(arg) with png_error returning to this function. */
+    saved_error_buf = image->opaque->error_buf;
+    result = setjmp(safe_jmpbuf) == 0;
++IJON_INC((int)result); /* PATCHID:10308 */
+ 
+    if (result != 0)
+    {
+ 
+       image->opaque->error_buf = safe_jmpbuf;
++IJON_SET((int)image->flags); /* PATCHID:10102 */
+       result = function(arg);
+    }
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+    MAGMA_LOG("PNG002", (image->flags & PNG_IMAGE_FLAG_INVALID) != 0);
++IJON_SET((int)image->flags); /* PATCHID:9642 */
+ #endif
+ 
+    image->opaque->error_buf = saved_error_buf;
+diff --git a/pngrutil.c b/pngrutil.c
+index 8df1dc83d..3c942a089 100644
+--- a/pngrutil.c
++++ b/pngrutil.c
+@@ -972,6 +972,10 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+    /* The cast is safe because 'length' is less than 3*PNG_MAX_PALETTE_LENGTH */
+    num = (int)length / 3;
++IJON_CMP((unsigned long long)length, (unsigned long long)(3 * 2)); /* PATCHID:13497 */
++IJON_CMP((unsigned long long)length, (unsigned long long)(3 * 4)); /* PATCHID:13295 */
++IJON_CMP((unsigned long long)length, (unsigned long long)(3 * 16)); /* PATCHID:12732 */
++IJON_CMP((unsigned long long)length, (unsigned long long)(3 * 256)); /* PATCHID:12529 */
+ 
+    /* If the palette has 256 or fewer entries but is too large for the bit
+     * depth, we don't issue an error, to preserve the behavior of previous
+@@ -982,6 +986,8 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+       max_palette_length = (1 << png_ptr->bit_depth);
+    else
+       max_palette_length = PNG_MAX_PALETTE_LENGTH;
++IJON_DIST((long long)num, (long long)(max_palette_length + 1)); /* PATCHID:12259 */
++IJON_SET((int)max_palette_length); /* PATCHID:11443 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+    if (num > max_palette_length)
+@@ -989,6 +995,7 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ #endif
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_CMP((unsigned long long)num, (unsigned long long)max_palette_length); /* PATCHID:10745 */
+    MAGMA_LOG("PNG003", num > max_palette_length);
+ #endif
+ 
+@@ -3184,12 +3191,16 @@ png_check_chunk_length(png_const_structrp png_ptr, png_uint_32 length)
+          * (png_ptr->bit_depth > 8? 2: 1)
+          + 1
+          + (png_ptr->interlaced? 6: 0);
++IJON_MAX((unsigned long long)png_ptr->channels); /* PATCHID:9094 */
++IJON_MAX((unsigned long long)png_ptr->width); /* PATCHID:8672 */
++IJON_CMP((unsigned long long)row_factor_l, 4294967296ULL); /* PATCHID:8084 */
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+       MAGMA_LOG("PNG001", row_factor_l == ((size_t)1 << (sizeof(png_uint_32) * 8)));
+ #endif
+ 
+       size_t row_factor = (png_uint_32)row_factor_l;
++IJON_CMP((unsigned long long)row_factor, 0ULL); /* PATCHID:7196 */
+ #endif
+       if (png_ptr->height > PNG_UINT_32_MAX/row_factor)
+          idat_limit = PNG_UINT_31_MAX;
+@@ -3475,8 +3486,12 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+             png_error(png_ptr, "invalid user transform pixel depth");
+ 
+          pixel_depth >>= 3; /* now in bytes */
++IJON_MAX((unsigned long long)pixel_depth); /* PATCHID:6598 */
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_CMP((unsigned long long)pixel_depth, (unsigned long long)0xFF); /* PATCHID:5806 */
++IJON_CMP((unsigned long long)row_width, (unsigned long long)0xFFFFFFFF); /* PATCHID:5200 */
++IJON_MAX((unsigned long long)row_width); /* PATCHID:5145 */
+          MAGMA_LOG("PNG004", (row_width * pixel_depth) != (u_int64_t)row_width * pixel_depth);
+ #endif
+          row_width *= pixel_depth;
+@@ -4470,6 +4485,9 @@ png_read_start_row(png_structrp png_ptr)
+    }
+ 
+    max_pixel_depth = (unsigned int)png_ptr->pixel_depth;
++IJON_CTX(32); /* PATCHID:4964 */
++IJON_MAX((unsigned long long)max_pixel_depth); /* PATCHID:4721 */
++IJON_MAX((unsigned long long)png_ptr->width); /* PATCHID:4403 */
+ 
+    /* WARNING: * png_read_transform_info (pngrtran.c) performs a simpler set of
+     * calculations to calculate the final pixel depth, then
+@@ -4496,6 +4514,7 @@ png_read_start_row(png_structrp png_ptr)
+ 
+          else
+             max_pixel_depth = 24;
++IJON_SET((int)max_pixel_depth); /* PATCHID:3811 */
+       }
+ 
+       else if (png_ptr->color_type == PNG_COLOR_TYPE_GRAY)
+@@ -4514,6 +4533,7 @@ png_read_start_row(png_structrp png_ptr)
+             max_pixel_depth *= 4;
+             max_pixel_depth /= 3;
+          }
++IJON_SET((int)max_pixel_depth); /* PATCHID:3763 */
+       }
+    }
+ #endif
+@@ -4546,6 +4566,7 @@ png_read_start_row(png_structrp png_ptr)
+ 
+          else
+             max_pixel_depth = 32;
++IJON_SET((int)max_pixel_depth); /* PATCHID:3741 */
+       }
+ 
+       else if (png_ptr->color_type == PNG_COLOR_TYPE_RGB ||
+@@ -4578,6 +4599,7 @@ png_read_start_row(png_structrp png_ptr)
+ 
+          else
+             max_pixel_depth = 64;
++IJON_SET((int)max_pixel_depth); /* PATCHID:2732 */
+       }
+ 
+       else
+@@ -4609,6 +4631,7 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED)
+ 
+       if (user_pixel_depth > max_pixel_depth)
+          max_pixel_depth = user_pixel_depth;
++IJON_SET((int)max_pixel_depth); /* PATCHID:2071 */
+    }
+ #endif
+ 
+@@ -4627,6 +4650,7 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED)
+     */
+    row_bytes = PNG_ROWBYTES(max_pixel_depth, row_bytes) +
+        1 + ((max_pixel_depth + 7) >> 3U);
++IJON_MAX((unsigned long long)row_bytes); /* PATCHID:1955 */
+ 
+ #if MAGMA_ENABLE_CANARIES
+     /* Since width is initially aligned on the next larger 8 pixels,
+@@ -4639,6 +4663,8 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED)
+      * 3 bits.
+      */
+    size_t row_bytes_check = row_bytes & ~((size_t)7);
++IJON_DIST((long long)row_bytes_check, (long long)((png_ptr->width + 7) & ~((png_uint_32)7))); /* PATCHID:1330 */
++IJON_CMP((unsigned long long)row_bytes_check, (unsigned long long)((png_ptr->width + 7) & ~((png_uint_32)7))); /* PATCHID:693 */
+     /* The input width resulted in an integer overflow, which could
+      * later cause a heap buffer overflow due to a bad allocation size
+      */
