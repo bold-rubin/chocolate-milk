@@ -1,0 +1,30 @@
+diff --git a/instrumentation/SanitizerCoveragePCGUARD.so.cc b/instrumentation/SanitizerCoveragePCGUARD.so.cc
+index 1b831aaf..469b3f05 100644
+--- a/instrumentation/SanitizerCoveragePCGUARD.so.cc
++++ b/instrumentation/SanitizerCoveragePCGUARD.so.cc
+@@ -536,8 +536,8 @@ bool ModuleSanitizerCoverageAFL::instrumentModule(
+   if (ijon_enabled) {
+ 
+     // Always create __afl_ijon_enabled for IJON memory allocation
+-    Constant *One32 = ConstantInt::get(Int32Ty, 1);
+-    new GlobalVariable(M, Int32Ty, false, GlobalValue::ExternalLinkage, One32,
++    // Constant *One32 = ConstantInt::get(Int32Ty, 1);
++    new GlobalVariable(M, Int32Ty, false, GlobalValue::ExternalLinkage, nullptr,
+                        "__afl_ijon_enabled");
+ 
+     // Only create __afl_ijon_state if state-aware functions are used
+diff --git a/instrumentation/afl-compiler-rt.o.c b/instrumentation/afl-compiler-rt.o.c
+index 5b179f6d..9dcb232d 100644
+--- a/instrumentation/afl-compiler-rt.o.c
++++ b/instrumentation/afl-compiler-rt.o.c
+@@ -421,6 +421,10 @@ static void __afl_map_shm(void) {
+     __afl_ijon_map_increased = 1;
+ 
+   }
++  if (getenv("AFL_ENABLE_IJON")) { 
++      fprintf(stderr, "DEBUG: Enabling IJON via AFL_ENABLE_IJON\n");
++      __afl_ijon_enabled = 1;
++  }
+ 
+   char *id_str = getenv(SHM_ENV_VAR);
+ 

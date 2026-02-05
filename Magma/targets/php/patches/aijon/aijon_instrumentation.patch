@@ -1,0 +1,489 @@
+diff --git a/ext/exif/exif.c b/ext/exif/exif.c
+index c5614cb6683..e9cf8aa8609 100644
+--- a/ext/exif/exif.c
++++ b/ext/exif/exif.c
+@@ -2073,15 +2073,20 @@ static inline char *exif_offset_info_try_get(
+ 	return start;
+ #else
+ 	if ((offset + length) > (info->valid_end - info->valid_start)) {
++IJON_MAX((unsigned long long)length); /* PATCHID:12912 */
++IJON_MAX((unsigned long long)offset); /* PATCHID:12057 */
+ 		return NULL;
+ 	}
+ #ifdef MAGMA_ENABLE_CANARIES
+ 	// The canaries are split so that a triggered bug is recorded as early as
+ 	//   possible.
+ 	MAGMA_LOG("PHP011", ptr_offset_overflows(info->offset_base, offset));
++IJON_CMP((unsigned long long)offset, (unsigned long long)SIZE_MAX); /* PATCHID:11291 */
+ 	MAGMA_LOG("PHP011", ptr_offset_overflows(info->offset_base + offset, length));
++IJON_CMP((unsigned long long)length, (unsigned long long)SIZE_MAX); /* PATCHID:10618 */
+ 	MAGMA_LOG("PHP011", MAGMA_OR((info->offset_base + offset) < info->valid_start,
+ 			(info->offset_base + offset + length) > info->valid_end));
++IJON_DIST((long long)(info->offset_base + offset + length), (long long)info->valid_end); /* PATCHID:10337 */
+ #endif
+ 	return info->offset_base + offset;
+ #endif
+@@ -3159,6 +3164,7 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
+ 	exif_offset_info new_info;
+ 
+ 	for (i=0; i<=sizeof(maker_note_array)/sizeof(maker_note_type); i++) {
++IJON_SET((int)i); /* PATCHID:8776 */
+ 		if (i==sizeof(maker_note_array)/sizeof(maker_note_type)) {
+ #ifdef EXIF_DEBUG
+ 			exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "No maker note data found. Detected maker: %s (length = %d)", ImageInfo->make, ImageInfo->make ? strlen(ImageInfo->make) : 0);
+@@ -3168,13 +3174,16 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
+ 		}
+ 
+ 		maker_note = maker_note_array+i;
++IJON_INC((int)i); /* PATCHID:7762 */
+ 
+ 		if (maker_note->make && (!ImageInfo->make || strcmp(maker_note->make, ImageInfo->make)))
+ 			continue;
+ 		if (maker_note->id_string && value_len >= maker_note->id_string_len
+ 				&& strncmp(maker_note->id_string, value_ptr, maker_note->id_string_len))
+ 			continue;
++IJON_INC((int)i); /* PATCHID:9859 */
+ 		break;
++IJON_SET((int)(maker_note - maker_note_array)); /* PATCHID:6842 */
+ 	}
+ 
+ 
+@@ -3183,6 +3192,7 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
+ 		/* Do not go past the value end */
+ 		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "IFD data too short: 0x%04X offset 0x%04X", value_len, maker_note->offset);
+ 		return true;
++IJON_CMP((unsigned long long)maker_note->offset, (unsigned long long)(value_len - 1)); /* PATCHID:9737 */
+ 	}
+ #else
+ 	if (maker_note->offset >= value_len) {
+@@ -3191,6 +3201,9 @@ static bool exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * val
+ 	}
+ 	#ifdef MAGMA_ENABLE_CANARIES
+ 		MAGMA_LOG("PHP009",MAGMA_OR(maker_note->offset == value_len - 1,value_len < 2));
++IJON_CTX(329); /* PATCHID:6566 */
++IJON_DIST((long long)maker_note->offset, (long long)(value_len - 1)); /* PATCHID:6553 */
++IJON_MIN((unsigned long long)value_len); /* PATCHID:5878 */
+ 	#endif
+ 
+ #endif
+@@ -3974,8 +3987,11 @@ static bool exif_scan_JPEG_header(image_info_type *ImageInfo)
+ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
+ {
+ 	uchar           c, *data = (uchar*)ImageInfo->Thumbnail.data;
++IJON_MIN((unsigned long long)ImageInfo->Thumbnail.size); /* PATCHID:5874 */
+ 	int             n, marker;
+ 	size_t          length=2, pos=0;
++IJON_MIN((unsigned long long)ImageInfo->Thumbnail.size); /* PATCHID:4155 */
++IJON_MIN((unsigned long long)ImageInfo->Thumbnail.size); /* PATCHID:3765 */
+ 	jpeg_sof_info   sof_info;
+ #ifdef MAGMA_ENABLE_FIXES
+ 	if (!data || ImageInfo->Thumbnail.size < 4) {
+@@ -3984,8 +4000,10 @@ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
+ #else
+ 	#ifdef MAGMA_ENABLE_CANARIES
+ 	MAGMA_LOG("PHP003", MAGMA_AND((bool)data, ImageInfo->Thumbnail.size < 4));
++
+ 	#endif
+ 	if (!data) {
++IJON_DIST((long long)ImageInfo->Thumbnail.size, (long long)4); /* PATCHID:4876 */
+ 		return false; /* nothing to do here */
+ 	}
+ #endif
+@@ -3994,7 +4012,10 @@ static bool exif_scan_thumbnail(image_info_type *ImageInfo)
+ 			exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, "Thumbnail is not a JPEG image");
+ 		}
+ 		return false;
++IJON_INC((int)pos); /* PATCHID:4442 */
+ 	}
++IJON_DIST((long long)pos, (long long)ImageInfo->Thumbnail.size); /* PATCHID:4436 */
++IJON_MAX((unsigned long long)pos); /* PATCHID:3770 */
+ 	for (;;) {
+ 		pos += length;
+ 		if (pos>=ImageInfo->Thumbnail.size)
+@@ -4103,6 +4124,8 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+ 	MAGMA_LOG("PHP002", dir_offset > SIZE_MAX - 2);
++IJON_DIST((long long)dir_offset, (long long)(SIZE_MAX - 2)); /* PATCHID:3005 */
++IJON_MAX((unsigned long long)dir_offset); /* PATCHID:2741 */
+ #endif
+ 	if (ImageInfo->FileSize >= dir_offset+2) {
+ #endif
+@@ -4113,6 +4136,7 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
+ 		php_stream_seek(ImageInfo->infile, dir_offset, SEEK_SET); /* we do not know the order of sections */
+ 		php_stream_read(ImageInfo->infile, (char*)ImageInfo->file.list[sn].data, 2);
+ 		num_entries = php_ifd_get16u(ImageInfo->file.list[sn].data, ImageInfo->motorola_intel);
++IJON_SET((int)num_entries); /* PATCHID:1808 */
+ 		dir_size = 2/*num dir entries*/ +12/*length of entry*/*(size_t)num_entries +4/* offset to next ifd (points to thumbnail or NULL)*/;
+ 		if (ImageInfo->FileSize >= dir_size && ImageInfo->FileSize - dir_size >= dir_offset) {
+ #ifdef EXIF_DEBUG
+@@ -4129,6 +4153,7 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
+ 			/* now we have the directory we can look how long it should be */
+ 			ifd_size = dir_size;
+ 			for(i=0;i<num_entries;i++) {
++IJON_INC((int)i); /* PATCHID:1779 */
+ 				dir_entry 	 = ImageInfo->file.list[sn].data+2+i*12;
+ 				entry_tag    = php_ifd_get16u(dir_entry+0, ImageInfo->motorola_intel);
+ 				entry_type   = php_ifd_get16u(dir_entry+2, ImageInfo->motorola_intel);
+@@ -4185,11 +4210,13 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
+ 					}
+ 				} else {
+ 					entry_offset = php_ifd_get32u(dir_entry+8, ImageInfo->motorola_intel);
++IJON_MAX((unsigned long long)entry_offset); /* PATCHID:956 */
+ 					/* if entry needs expading ifd cache and entry is at end of current ifd cache. */
+ 					/* otherwise there may be huge holes between two entries */
+ 					if (entry_offset + entry_length > dir_offset + ifd_size
+ 					  && entry_offset == dir_offset + ifd_size) {
+ 						ifd_size = entry_offset + entry_length - dir_offset;
++IJON_MAX((unsigned long long)ifd_size); /* PATCHID:769 */
+ #ifdef EXIF_DEBUG
+ 						exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "Resize struct: x%04X + x%04X - x%04X = x%04X", entry_offset, entry_length, dir_offset, ifd_size);
+ #endif
+@@ -4244,6 +4271,7 @@ static bool exif_process_IFD_in_TIFF_impl(image_info_type *ImageInfo, size_t dir
+ 								break;
+ 						}
+ 						entry_offset = php_ifd_get32u(dir_entry+8, ImageInfo->motorola_intel);
++IJON_MAX((unsigned long long)entry_offset); /* PATCHID:71 */
+ #ifdef EXIF_DEBUG
+ 						exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "Next IFD: %s @x%04X", exif_get_sectionname(sub_section_index), entry_offset);
+ #endif
+diff --git a/ext/intl/locale/locale_methods.c b/ext/intl/locale/locale_methods.c
+index 7b2d9a510ba..94be8c0d85d 100644
+--- a/ext/intl/locale/locale_methods.c
++++ b/ext/intl/locale/locale_methods.c
+@@ -483,6 +483,9 @@ static void get_icu_disp_value_src_php( char* tag_name, INTERNAL_FUNCTION_PARAME
+ 	{
+ 		RETURN_THROWS();
+ 	}
++IJON_CMP((unsigned long long)loc_name_len, (unsigned long long)ULOC_FULLNAME_CAPACITY); /* PATCHID:56028 */
++IJON_MAX((unsigned long long)loc_name_len); /* PATCHID:55869 */
++IJON_SET((int)loc_name_len); /* PATCHID:54947 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+ 	if(loc_name_len > ULOC_FULLNAME_CAPACITY) {
+diff --git a/ext/intl/msgformat/msgformat_parse.c b/ext/intl/msgformat/msgformat_parse.c
+index d4bfc0d23eb..4530f656fed 100644
+--- a/ext/intl/msgformat/msgformat_parse.c
++++ b/ext/intl/msgformat/msgformat_parse.c
+@@ -92,6 +92,9 @@ PHP_FUNCTION( msgfmt_parse_message )
+ 	{
+ 		RETURN_THROWS();
+ 	}
++IJON_DIST((long long)slocale_len, (long long)(INTL_MAX_LOCALE_LEN + 1)); /* PATCHID:60238 */
++IJON_MAX((unsigned long long)slocale_len); /* PATCHID:60233 */
++IJON_CMP((unsigned long long)slocale_len, (unsigned long long)INTL_MAX_LOCALE_LEN); /* PATCHID:59956 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+ 	INTL_CHECK_LOCALE_LEN(slocale_len);
+diff --git a/ext/phar/phar.c b/ext/phar/phar.c
+index 1f1f7ebd0d5..4082aab5b85 100644
+--- a/ext/phar/phar.c
++++ b/ext/phar/phar.c
+@@ -793,20 +793,31 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
+ 	}
+ 
+ 	PHAR_GET_32(buffer, manifest_len);
++IJON_MAX((unsigned long long) manifest_len); /* PATCHID:50487 */
++IJON_SET((int)manifest_len); /* PATCHID:46042 */
++IJON_SET((int) manifest_len); /* PATCHID:44187 */
+ 
++IJON_CMP((unsigned long long)manifest_len, (unsigned long long)100); /* PATCHID:45746 */
++IJON_CMP((unsigned long long)manifest_len, (unsigned long long)10); /* PATCHID:45300 */
+ 	if (manifest_len > 1048576 * 100) {
++IJON_CMP((unsigned long long) manifest_len, (unsigned long long) 14); /* PATCHID:43463 */
++IJON_CMP((unsigned long long) manifest_len, (unsigned long long) 10); /* PATCHID:42860 */
+ 		/* prevent serious memory issues by limiting manifest to at most 100 MB in length */
+ 		MAPPHAR_ALLOC_FAIL("manifest cannot be larger than 100 MB in phar \"%s\"")
+ 	}
+ 
++
+ 	buffer = (char *)emalloc(manifest_len);
+ 	savebuf = buffer;
+ 	endbuffer = buffer + manifest_len;
++IJON_DIST((long long) (buffer + 4), (long long) endbuffer); /* PATCHID:42097 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 	if (manifest_len < MANIFEST_FIXED_LEN || manifest_len != php_stream_read(fp, buffer, manifest_len)) {
+ 		MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest header)")
+ 	}
++IJON_SET((int) manifest_count); /* PATCHID:52287 */
+ 
++IJON_DIST((long long) buffer, (long long) endbuffer); /* PATCHID:49673 */
+ 	/* extract the number of entries */
+ 	SAFE_PHAR_GET_32(buffer, endbuffer, manifest_count);
+ #else
+@@ -817,6 +828,7 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
+ 	PHAR_GET_32(buffer, manifest_count);
+ 	#ifdef MAGMA_ENABLE_CANARIES
+ 		MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
++IJON_INC((int) (buffer + 4 > endbuffer)); /* PATCHID:41206 */
+ 	#endif
+ #endif
+ 
+@@ -832,6 +844,7 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
+ 	if ((manifest_ver & PHAR_API_VER_MASK) < PHAR_API_MIN_READ) {
+ 		efree(savebuf);
+ 		php_stream_close(fp);
++IJON_DIST((long long) buffer, (long long) endbuffer); /* PATCHID:49327 */
+ 		if (error) {
+ 			spprintf(error, 0, "phar \"%s\" is API version %1.u.%1.u.%1.u, and cannot be processed", fname, manifest_ver >> 12, (manifest_ver >> 8) & 0xF, (manifest_ver >> 4) & 0x0F);
+ 		}
+@@ -1046,8 +1059,11 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
+ 		if (error) {
+ 			spprintf(error, 0, "phar \"%s\" does not have a signature", fname);
+ 		}
++
+ 		return FAILURE;
+ 	} else {
++IJON_MIN((unsigned long long)(endbuffer - buffer)); /* PATCHID:48403 */
++IJON_DIST((long long)(buffer + 4), (long long)endbuffer); /* PATCHID:47616 */
+ 		sig_flags = 0;
+ 		sig_len = 0;
+ 	}
+@@ -1059,6 +1075,7 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
+ 	PHAR_GET_32(buffer, manifest_flags);
+ 	#ifdef MAGMA_ENABLE_CANARIES
+ 		MAGMA_LOG("PHP007",buffer + 4 > endbuffer);
++IJON_CMP((unsigned long long)manifest_len, (unsigned long long)(10 + tmp_len)); /* PATCHID:46742 */
+ 	#endif
+ #endif
+ 	if (buffer + tmp_len > endbuffer) {
+@@ -1152,18 +1169,25 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, size_t fname_len, ch
+ 	/* set up our manifest */
+ 	zend_hash_init(&mydata->manifest, manifest_count,
+ 		zend_get_hash_value, destroy_phar_manifest_entry, (bool)mydata->is_persistent);
++IJON_INC((int) manifest_index); /* PATCHID:51631 */
+ 	zend_hash_init(&mydata->mounted_dirs, 5,
+ 		zend_get_hash_value, NULL, (bool)mydata->is_persistent);
+ 	zend_hash_init(&mydata->virtual_dirs, manifest_count * 2,
+ 		zend_get_hash_value, NULL, (bool)mydata->is_persistent);
+ 	mydata->fname = pestrndup(fname, fname_len, mydata->is_persistent);
++IJON_DIST((long long) (endbuffer - buffer), (long long) 28); /* PATCHID:51618 */
+ #ifdef PHP_WIN32
+ 	phar_unixify_path_separators(mydata->fname, fname_len);
+ #endif
+ 	mydata->fname_len = fname_len;
+ 	offset = halt_offset + manifest_len + 4;
++IJON_MAX((unsigned long long) (buffer + 28 > endbuffer ? 1 : 0)); /* PATCHID:50621 */
+ 	memset(&entry, 0, sizeof(phar_entry_info));
+ 	entry.phar = mydata;
++IJON_DIST((long long)entry.filename_len, (long long)(endbuffer - buffer - 20)); /* PATCHID:54366 */
++IJON_DIST((long long)entry.filename_len, (long long)(endbuffer - buffer - 24)); /* PATCHID:53478 */
++IJON_CMP((unsigned long long)entry.filename_len, (unsigned long long)(INT_MAX - 20)); /* PATCHID:52763 */
++IJON_MAX((unsigned long long)entry.filename_len); /* PATCHID:52401 */
+ 	entry.fp_type = PHAR_FP;
+ 	entry.is_persistent = mydata->is_persistent;
+ 
+@@ -2108,12 +2132,14 @@ woohoo:
+ 	}
+ 
+ 	pos = memchr(filename + 1, '.', filename_len);
++IJON_SET((int)(pos - filename)); /* PATCHID:16824 */
+ next_extension:
+ 	if (!pos) {
+ 		return FAILURE;
+ 	}
+ 
+ 	while (pos != filename && (*(pos - 1) == '/' || *(pos - 1) == '\0')) {
++IJON_INC((int)(pos != filename)); /* PATCHID:15943 */
+ 	#ifdef MAGMA_ENABLE_FIXES
+ 		pos = memchr(pos + 1, '.', filename_len - (pos - filename) - 1);
+ 	#else
+@@ -2121,8 +2147,12 @@ next_extension:
+ 			MAGMA_LOG("PHP001", memchr(pos + 1, '.', filename_len - (pos - filename) - 1) == NULL);
+ 		#endif
+ 		pos = memchr(pos + 1, '.', filename_len - (pos - filename) + 1);
++IJON_SET((int)(filename_len - (pos - filename))); /* PATCHID:15110 */
++IJON_DIST((long long)(filename_len - (pos - filename)), (long long)1); /* PATCHID:14359 */
++IJON_MAX((unsigned long long)(pos - filename)); /* PATCHID:13691 */
+ 	#endif
+ 		if (!pos) {
++IJON_INC((int)(pos == NULL)); /* PATCHID:13020 */
+ 			return FAILURE;
+ 		}
+ 	}
+diff --git a/ext/phar/util.c b/ext/phar/util.c
+index 30214118f59..c4d14653424 100644
+--- a/ext/phar/util.c
++++ b/ext/phar/util.c
+@@ -1482,6 +1482,11 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 	php_stream_rewind(fp);
+ 
+ 	switch (sig_type) {
++IJON_SET((int)sig_type); /* PATCHID:40315 */
++IJON_SET((int)sig_type); /* PATCHID:33563 */
++IJON_CTX((unsigned long long)sig_type); /* PATCHID:40020 */
++IJON_SET((int)sig_type); /* PATCHID:26226 */
++IJON_SET((int)sig_type); /* PATCHID:19315 */
+ 		case PHAR_SIG_OPENSSL: {
+ #ifdef PHAR_HAVE_OPENSSL
+ 			BIO *in;
+@@ -1598,11 +1603,22 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ #endif
+ 
+ 			*signature_len = phar_hex_str((const char*)sig, sig_len, signature);
++IJON_CTX((unsigned long long)sig_type); /* PATCHID:39734 */
+ 		}
++IJON_CTX(383); /* PATCHID:33263 */
+ 		break;
+ 		case PHAR_SIG_SHA512: {
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:33243 */
++IJON_DIST((long long)sig_len, (long long)64); /* PATCHID:32618 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)64); /* PATCHID:31958 */
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:25209 */
++IJON_DIST((long long)sig_len, (long long)63); /* PATCHID:24466 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)64); /* PATCHID:23606 */
+ 			unsigned char digest[64];
+ 			PHP_SHA512_CTX context;
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:39690 */
++IJON_DIST((long long)sig_len, (long long)64); /* PATCHID:38981 */
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:18316 */
+ 		#ifdef MAGMA_ENABLE_FIXES
+ 			if (sig_len < sizeof(digest)) {
+ 				if (error) {
+@@ -1635,19 +1651,30 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 
+ 			PHP_SHA512Final(digest, &context);
+ 
++IJON_CTX((unsigned long long)sig_type); /* PATCHID:37967 */
+ 			if (memcmp(digest, sig, sizeof(digest))) {
+ 				if (error) {
+ 					spprintf(error, 0, "broken signature");
+ 				}
+ 				return FAILURE;
++IJON_CTX(63); /* PATCHID:31122 */
+ 			}
+ 
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:30379 */
++IJON_DIST((long long)sig_len, (long long)32); /* PATCHID:29641 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)32); /* PATCHID:29498 */
+ 			*signature_len = phar_hex_str((const char*)digest, sizeof(digest), signature);
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:36960 */
++IJON_DIST((long long)sig_len, (long long)32); /* PATCHID:36285 */
+ 			break;
+ 		}
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:23096 */
++IJON_DIST((long long)sig_len, (long long)31); /* PATCHID:22346 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)32); /* PATCHID:21583 */
+ 		case PHAR_SIG_SHA256: {
+ 			unsigned char digest[32];
+ 			PHP_SHA256_CTX context;
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:17918 */
+ 		#ifdef MAGMA_ENABLE_FIXES
+ 			if (sig_len < sizeof(digest)) {
+ 				if (error) {
+@@ -1672,6 +1699,7 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 
+ 			while ((len = php_stream_read(fp, (char*)buf, read_size)) > 0) {
+ 				PHP_SHA256Update(&context, buf, len);
++IJON_CTX((unsigned long long)sig_type); /* PATCHID:35875 */
+ 				read_len -= (zend_off_t)len;
+ 				if ((size_t)read_len < read_size) {
+ 					read_size = (size_t)read_len;
+@@ -1681,18 +1709,28 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 			PHP_SHA256Final(digest, &context);
+ 
+ 			if (memcmp(digest, sig, sizeof(digest))) {
++IJON_CTX(417); /* PATCHID:28645 */
+ 				if (error) {
+ 					spprintf(error, 0, "broken signature");
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:35775 */
++IJON_DIST((long long)sig_len, (long long)20); /* PATCHID:34923 */
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:28520 */
++IJON_DIST((long long)sig_len, (long long)20); /* PATCHID:27584 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)20); /* PATCHID:27385 */
+ 				}
+ 				return FAILURE;
+ 			}
+ 
+ 			*signature_len = phar_hex_str((const char*)digest, sizeof(digest), signature);
+ 			break;
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:21544 */
++IJON_DIST((long long)sig_len, (long long)19); /* PATCHID:21263 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)20); /* PATCHID:21180 */
+ 		}
+ 		case PHAR_SIG_SHA1: {
+ 			unsigned char digest[20];
+ 			PHP_SHA1_CTX  context;
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:17001 */
+ 		#ifdef MAGMA_ENABLE_FIXES
+ 			if (sig_len < sizeof(digest)) {
+ 				if (error) {
+@@ -1710,6 +1748,7 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 			PHP_SHA1Init(&context);
+ 			read_len = end_of_phar;
+ 
++IJON_CTX((unsigned long long)sig_type); /* PATCHID:34811 */
+ 			if ((size_t)read_len > sizeof(buf)) {
+ 				read_size = sizeof(buf);
+ 			} else {
+@@ -1722,7 +1761,10 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 				if ((size_t)read_len < read_size) {
+ 					read_size = (size_t)read_len;
+ 				}
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:34157 */
++IJON_DIST((long long)sig_len, (long long)16); /* PATCHID:33880 */
+ 			}
++IJON_CTX(306); /* PATCHID:26837 */
+ 
+ 			PHP_SHA1Final(digest, &context);
+ 
+@@ -1734,11 +1776,15 @@ int phar_verify_signature(php_stream *fp, size_t end_of_phar, uint32_t sig_type,
+ 			}
+ 
+ 			*signature_len = phar_hex_str((const char*)digest, sizeof(digest), signature);
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:21169 */
++IJON_DIST((long long)sig_len, (long long)15); /* PATCHID:20665 */
++IJON_CMP((unsigned long long)sig_len, (unsigned long long)16); /* PATCHID:20070 */
+ 			break;
+ 		}
+ 		case PHAR_SIG_MD5: {
+ 			unsigned char digest[16];
+ 			PHP_MD5_CTX   context;
++IJON_MIN((unsigned long long)sig_len); /* PATCHID:16977 */
+ 		#ifdef  MAGMA_ENABLE_FIXES
+ 			if (sig_len < sizeof(digest)) {
+ 				if (error) {
+diff --git a/ext/phar/zip.c b/ext/phar/zip.c
+index a62650c32ec..b44ef678945 100644
+--- a/ext/phar/zip.c
++++ b/ext/phar/zip.c
+@@ -425,6 +425,7 @@ foundit:
+ 			pefree(entry.filename, entry.is_persistent);
+ 
+ 			if (entry.uncompressed_filesize > 0x10000) {
++IJON_MIN((unsigned long long) entry.uncompressed_filesize); /* PATCHID:57611 */
+ 				PHAR_ZIP_FAIL("signatures larger than 64 KiB are not supported");
+ 			}
+ 
+@@ -447,6 +448,8 @@ foundit:
+ 			php_stream_seek(fp, sizeof(phar_zip_file_header) + entry.header_offset + entry.filename_len + PHAR_GET_16(zipentry.extra_len), SEEK_SET);
+ 			sig = (char *) emalloc(entry.uncompressed_filesize);
+ 			read = php_stream_read(fp, sig, entry.uncompressed_filesize);
++IJON_SET((int) read); /* PATCHID:57562 */
++IJON_DIST((long long) read, (long long) entry.uncompressed_filesize); /* PATCHID:56979 */
+ 		#ifdef MAGMA_ENABLE_FIXES
+ 			if (read != entry.uncompressed_filesize || read <= 8) {
+ 				php_stream_close(sigfile);
+@@ -461,6 +464,7 @@ foundit:
+ 			}
+ 			#ifdef MAGMA_ENABLE_CANARIES
+ 				MAGMA_LOG("PHP016",read <= 8);
++IJON_MAX((unsigned long long) (read <= 8 ? 1 : 0)); /* PATCHID:56109 */
+ 			#endif
+ 		#endif
+ 			mydata->sig_flags = PHAR_GET_32(sig);
+diff --git a/ext/standard/http_fopen_wrapper.c b/ext/standard/http_fopen_wrapper.c
+index e63c3667d30..21a464b7269 100644
+--- a/ext/standard/http_fopen_wrapper.c
++++ b/ext/standard/http_fopen_wrapper.c
+@@ -656,6 +656,10 @@ finish:
+ 		size_t tmp_line_len;
+ 		if (!php_stream_eof(stream) &&
+ 			php_stream_get_line(stream, tmp_line, sizeof(tmp_line) - 1, &tmp_line_len) != NULL) {
++IJON_SET((int)tmp_line_len); /* PATCHID:59516 */
++IJON_CMP((unsigned long long)tmp_line_len, 1); /* PATCHID:58805 */
++IJON_CMP((unsigned long long)tmp_line_len, 0); /* PATCHID:58482 */
++IJON_MIN((unsigned long long)tmp_line_len); /* PATCHID:57989 */
+ 			zval http_response;
+ 
+ 			if (tmp_line_len > 9) {

@@ -1,0 +1,560 @@
+diff --git a/fofi/FoFiTrueType.cc b/fofi/FoFiTrueType.cc
+index ce592b8c..d64e2973 100644
+--- a/fofi/FoFiTrueType.cc
++++ b/fofi/FoFiTrueType.cc
+@@ -1397,16 +1397,28 @@ void FoFiTrueType::cvtSfnts(FoFiOutputFunc outputFunc, void *outputStream, const
+                 if ((j = seekTable(t42Tables[i].tag)) >= 0 && checkRegion(tables[j].offset, tables[j].len)) {
+                     dumpString(file + tables[j].offset, tables[j].len, outputFunc, outputStream);
+                 } else if (needVerticalMetrics && i == t42VheaTable) {
++#ifdef MAGMA_ENABLE_FIXES
+                     if (unlikely(length > (int)sizeof(vheaTab))) {
+                         error(errSyntaxWarning, -1, "length bigger than vheaTab size");
+                         length = sizeof(vheaTab);
+                     }
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("PDF017", length > (int)sizeof(vheaTab));
++#endif
++#endif
+                     dumpString(vheaTab, length, outputFunc, outputStream);
+                 } else if (needVerticalMetrics && i == t42VmtxTable) {
++#ifdef MAGMA_ENABLE_FIXES
+                     if (unlikely(length > vmtxTabLength)) {
+                         error(errSyntaxWarning, -1, "length bigger than vmtxTab size");
+                         length = vmtxTabLength;
+                     }
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("PDF017", length > vmtxTabLength);
++#endif
++#endif
+                     dumpString(vmtxTab, length, outputFunc, outputStream);
+                 }
+             }
+diff --git a/fofi/FoFiType1C.cc b/fofi/FoFiType1C.cc
+index ca1327c2..f3074f02 100644
+--- a/fofi/FoFiType1C.cc
++++ b/fofi/FoFiType1C.cc
+@@ -1285,7 +1285,14 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+                     --nOps;
+                     ok = true;
+                     getIndexVal(subrIdx, k, &val, &ok);
++#ifdef MAGMA_ENABLE_FIXES
+                     if (likely(ok && val.pos != offset)) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("PDF020", val.pos == offset);
++#endif
++                    if(ok) {
++#endif
+                         cvtGlyph(val.pos, val.len, charBuf, subrIdx, pDict, false, offsetBeingParsed);
+                     }
+                 } else {
+@@ -1522,7 +1529,14 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+                     --nOps;
+                     ok = true;
+                     getIndexVal(&gsubrIdx, k, &val, &ok);
++#ifdef MAGMA_ENABLE_FIXES
+                     if (likely(ok && val.pos != offset)) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("PDF020", val.pos == offset);
++#endif
++                    if(ok) {
++#endif
+                         cvtGlyph(val.pos, val.len, charBuf, subrIdx, pDict, false, offsetBeingParsed);
+                     }
+                 } else {
+diff --git a/poppler/Annot.cc b/poppler/Annot.cc
+index 9f19e22f..c63216cb 100644
+--- a/poppler/Annot.cc
++++ b/poppler/Annot.cc
+@@ -6048,7 +6048,14 @@ void AnnotInk::draw(Gfx *gfx, bool printing)
+ 
+         for (int i = 0; i < inkListLength; ++i) {
+             const AnnotPath *path = inkList[i];
++#ifdef MAGMA_ENABLE_FIXES
+             if (path && path->getCoordsLength() != 0) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF018", !path);
++#endif
++            if (path->getCoordsLength() != 0) {
++#endif
+                 appearBuilder.appendf("{0:.2f} {1:.2f} m\n", path->getX(0) - rect->x1, path->getY(0) - rect->y1);
+                 appearBBox->extendTo(path->getX(0) - rect->x1, path->getY(0) - rect->y1);
+ 
+diff --git a/poppler/FileSpec.cc b/poppler/FileSpec.cc
+index 53f9384c..ca9a3329 100644
+--- a/poppler/FileSpec.cc
++++ b/poppler/FileSpec.cc
+@@ -99,9 +99,13 @@ bool EmbFile::save2(FILE *f)
+ {
+     int c;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (unlikely(!m_objStr.isStream()))
+         return false;
+-
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF015", !m_objStr.isStream());
++#endif
+     m_objStr.streamReset();
+     while ((c = m_objStr.streamGetChar()) != EOF) {
+         fputc(c, f);
+@@ -139,11 +143,22 @@ FileSpec::FileSpec(const Object *fileSpecA)
+             }
+         }
+ 
++#ifdef MAGMA_ENABLE_FIXES
+         obj1 = fileSpec.dictLookup("Desc");
+         if (obj1.isString()) {
+             desc = obj1.getString()->copy();
+         }
+     }
++#else
++    }
++
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF013", !fileSpec.isDict());
++#endif
++    obj1 = fileSpec.dictLookup("Desc");
++    if (obj1.isString())
++            desc = obj1.getString()->copy();
++#endif
+ }
+ 
+ FileSpec::~FileSpec()
+diff --git a/poppler/GfxState.cc b/poppler/GfxState.cc
+index 4b0d6796..4441b8a4 100644
+--- a/poppler/GfxState.cc
++++ b/poppler/GfxState.cc
+@@ -2665,16 +2665,24 @@ void GfxSeparationColorSpace::getGray(const GfxColor *color, GfxGray *gray) cons
+     GfxColor color2;
+     int i;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (alt->getMode() == csDeviceGray && name->cmp("Black") == 0) {
+         *gray = clip01(gfxColorComp1 - color->c[0]);
+     } else {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF022", MAGMA_AND(alt->getMode() == csDeviceGray, name->cmp("Black") == 0));
++#endif
++#endif
+         x = colToDbl(color->c[0]);
+         func->transform(&x, c);
+         for (i = 0; i < alt->getNComps(); ++i) {
+             color2.c[i] = dblToCol(c[i]);
+         }
+         alt->getGray(&color2, gray);
++#ifdef MAGMA_ENABLE_FIXES
+     }
++#endif
+ }
+ 
+ void GfxSeparationColorSpace::getRGB(const GfxColor *color, GfxRGB *rgb) const
+@@ -2684,11 +2692,17 @@ void GfxSeparationColorSpace::getRGB(const GfxColor *color, GfxRGB *rgb) const
+     GfxColor color2;
+     int i;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (alt->getMode() == csDeviceGray && name->cmp("Black") == 0) {
+         rgb->r = clip01(gfxColorComp1 - color->c[0]);
+         rgb->g = clip01(gfxColorComp1 - color->c[0]);
+         rgb->b = clip01(gfxColorComp1 - color->c[0]);
+     } else {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF022", MAGMA_AND(alt->getMode() == csDeviceGray, name->cmp("Black") == 0));
++#endif
++#endif
+         x = colToDbl(color->c[0]);
+         func->transform(&x, c);
+         const int altNComps = alt->getNComps();
+@@ -2701,7 +2715,9 @@ void GfxSeparationColorSpace::getRGB(const GfxColor *color, GfxRGB *rgb) const
+             }
+         }
+         alt->getRGB(&color2, rgb);
++#ifdef MAGMA_ENABLE_FIXES
+     }
++#endif
+ }
+ 
+ void GfxSeparationColorSpace::getCMYK(const GfxColor *color, GfxCMYK *cmyk) const
+@@ -2711,6 +2727,7 @@ void GfxSeparationColorSpace::getCMYK(const GfxColor *color, GfxCMYK *cmyk) cons
+     GfxColor color2;
+     int i;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (name->cmp("Black") == 0) {
+         cmyk->c = 0;
+         cmyk->m = 0;
+@@ -2732,13 +2749,23 @@ void GfxSeparationColorSpace::getCMYK(const GfxColor *color, GfxCMYK *cmyk) cons
+         cmyk->y = color->c[0];
+         cmyk->k = 0;
+     } else {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF022", MAGMA_OR(name->cmp("Black") == 0, \
++                            MAGMA_OR(name->cmp("Cyan") == 0, \
++                            MAGMA_OR(name->cmp("Magenta") == 0, \
++                                     name->cmp("Yellow") == 0))));
++#endif
++#endif
+         x = colToDbl(color->c[0]);
+         func->transform(&x, c);
+         for (i = 0; i < alt->getNComps(); ++i) {
+             color2.c[i] = dblToCol(c[i]);
+         }
+         alt->getCMYK(&color2, cmyk);
++#ifdef MAGMA_ENABLE_FIXES
+     }
++#endif
+ }
+ 
+ void GfxSeparationColorSpace::getDeviceN(const GfxColor *color, GfxColor *deviceN) const
+@@ -4796,7 +4823,14 @@ GfxGouraudTriangleShading *GfxGouraudTriangleShading::parse(GfxResources *res, i
+         }
+     }
+     delete bitBuf;
++#ifdef MAGMA_ENABLE_FIXES
+     if (typeA == 5 && nVerticesA > 0 && vertsPerRow > 0) {
++#else
++    if (typeA == 5 && nVerticesA > 0) {
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF008", vertsPerRow <= 0);
++#endif
++#endif
+         nRows = nVerticesA / vertsPerRow;
+         nTrianglesA = (nRows - 1) * 2 * (vertsPerRow - 1);
+         trianglesA = (int(*)[3])gmallocn_checkoverflow(nTrianglesA * 3, sizeof(int));
+diff --git a/poppler/GfxState.h b/poppler/GfxState.h
+index 5aeb6e24..cf3ad467 100644
+--- a/poppler/GfxState.h
++++ b/poppler/GfxState.h
+@@ -1208,6 +1208,7 @@ public:
+ 
+     // Get the color space.
+     GfxColorSpace *getColorSpace() { return colorSpace; }
++    GfxColorSpace *getColorSpace2() { return colorSpace2; }
+ 
+     // Get stream decoding info.
+     int getNumPixelComps() const { return nComps; }
+diff --git a/poppler/JBIG2Stream.cc b/poppler/JBIG2Stream.cc
+index 725b2cf9..8404a643 100644
+--- a/poppler/JBIG2Stream.cc
++++ b/poppler/JBIG2Stream.cc
+@@ -808,8 +808,13 @@ void JBIG2Bitmap::combine(JBIG2Bitmap *bitmap, int x, int y, unsigned int combOp
+     oneByte = x0 == ((x1 - 1) & ~7);
+ 
+     for (yy = y0; yy < y1; ++yy) {
++#ifdef MAGMA_ENABLE_FIXES
+         if (unlikely((y + yy >= h) || (y + yy < 0)))
+             continue;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF019", MAGMA_OR(y + yy >= h, y + yy < 0));
++#endif
+ 
+         // one byte per line -- need to mask both left and right side
+         if (oneByte) {
+diff --git a/poppler/JPEG2000Stream.cc b/poppler/JPEG2000Stream.cc
+index 36da2fcd..2320dbb8 100644
+--- a/poppler/JPEG2000Stream.cc
++++ b/poppler/JPEG2000Stream.cc
+@@ -247,8 +247,15 @@ void JPXStream::init()
+     }
+ 
+     int bufSize = BUFFER_INITIAL_SIZE;
++#ifdef MAGMA_ENABLE_FIXES
+     if (oLen.isInt() && oLen.getInt() > 0)
+         bufSize = oLen.getInt();
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF002", oLen.getInt() < 0);
++#endif
++    if (oLen.isInt()) bufSize = oLen.getInt();
++#endif
+ 
+     bool indexed = false;
+     if (cspace.isArray() && cspace.arrayGetLength() > 0) {
+@@ -294,11 +301,16 @@ void JPXStream::init()
+                 break;
+             }
+             const int componentPixels = priv->image->comps[component].w * priv->image->comps[component].h;
++#ifdef MAGMA_ENABLE_FIXES
+             if (componentPixels != priv->npixels) {
+                 error(errSyntaxWarning, -1, "Component {0:d} has different WxH than component 0", component);
+                 close();
+                 break;
+             }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF005", componentPixels != priv->npixels);
++#endif
+             unsigned char *cdata = (unsigned char *)priv->image->comps[component].data;
+             int adjust = 0;
+             int depth = priv->image->comps[component].prec;
+diff --git a/poppler/Parser.cc b/poppler/Parser.cc
+index 03cec1dc..00888746 100644
+--- a/poppler/Parser.cc
++++ b/poppler/Parser.cc
+@@ -181,10 +181,14 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+             shift();
+             shift();
+ 
++#ifdef MAGMA_ENABLE_FIXES
+             if (unlikely(num <= 0 || gen < 0)) {
+                 return Object();
+             }
+-
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF016", MAGMA_OR(num <=0, gen < 0));
++#endif
+             Ref r;
+             r.num = num;
+             r.gen = gen;
+@@ -274,9 +278,15 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+     if (unlikely(length < 0)) {
+         return nullptr;
+     }
++
++#ifdef MAGMA_ENABLE_FIXES
+     if (unlikely(pos > LLONG_MAX - length)) {
+         return nullptr;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF012", pos > LLONG_MAX - length);
++#endif
+     lexer.setPos(pos + length);
+ 
+     // refill token buffers and check for 'endstream'
+@@ -298,8 +308,15 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+             // When building the xref we can't use it so use this
+             // kludge for broken PDF files: just add 5k to the length, and
+             // hope its enough
++#ifdef MAGMA_ENABLE_FIXES
+             if (length < LLONG_MAX - pos - 5000)
+                 length += 5000;
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF009", length >= LLONG_MAX - pos - 5000);
++#endif
++            length += 5000;
++#endif
+         }
+     }
+ 
+diff --git a/poppler/SplashOutputDev.cc b/poppler/SplashOutputDev.cc
+index 3fd590b8..3797455a 100644
+--- a/poppler/SplashOutputDev.cc
++++ b/poppler/SplashOutputDev.cc
+@@ -2453,7 +2453,14 @@ void SplashOutputDev::type3D1(GfxState *state, double wx, double wy, double llx,
+     int i, j;
+ 
+     // ignore multiple d0/d1 operators
++#ifdef MAGMA_ENABLE_FIXES
+     if (!t3GlyphStack || t3GlyphStack->haveDx) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF010", t3GlyphStack == nullptr);
++#endif
++    if (t3GlyphStack->haveDx) {
++#endif
+         return;
+     }
+     t3GlyphStack->haveDx = true;
+@@ -4280,10 +4287,15 @@ bool SplashOutputDev::tilingPatternFill(GfxState *state, Gfx *gfxA, Catalog *cat
+         surface_width = (int)ceil(fabs(kx));
+         surface_height = (int)ceil(fabs(ky));
+         // adjust repeat values to completely fill region
++#ifdef MAGMA_ENABLE_FIXES
+         if (unlikely(surface_width == 0 || surface_height == 0)) {
+             state->setCTM(savedCTM[0], savedCTM[1], savedCTM[2], savedCTM[3], savedCTM[4], savedCTM[5]);
+             return false;
+         }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF001", MAGMA_OR(surface_width == 0, surface_height == 0));
++#endif
+         repeatX = result_width / surface_width;
+         repeatY = result_height / surface_height;
+         if (surface_width * repeatX < result_width)
+diff --git a/poppler/Stream.cc b/poppler/Stream.cc
+index 09773861..6c9d78a3 100644
+--- a/poppler/Stream.cc
++++ b/poppler/Stream.cc
+@@ -583,7 +583,14 @@ ImageStream::ImageStream(Stream *strA, int widthA, int nCompsA, int nBitsA)
+ 
+     nVals = width * nComps;
+     inputLineSize = (nVals * nBits + 7) >> 3;
++#ifdef MAGMA_ENABLE_FIXES
+     if (nComps <= 0 || nBits <= 0 || nVals > INT_MAX / nBits - 7 || width > INT_MAX / nComps) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF021", nComps <= 0);
++#endif
++    if (nBits <= 0 || nVals > INT_MAX / nBits - 7 || width > INT_MAX / nComps) {
++#endif
+         inputLineSize = -1;
+     }
+     inputLine = (unsigned char *)gmallocn_checkoverflow(inputLineSize, sizeof(char));
+@@ -595,7 +602,14 @@ ImageStream::ImageStream(Stream *strA, int widthA, int nCompsA, int nBitsA)
+         } else {
+             imgLineSize = nVals;
+         }
++#ifdef MAGMA_ENABLE_FIXES
+         if (nComps <= 0 || width > INT_MAX / nComps) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF021", nComps <= 0);
++#endif
++        if (width > INT_MAX / nComps) {
++#endif
+             imgLineSize = -1;
+         }
+         imgLine = (unsigned char *)gmallocn_checkoverflow(imgLineSize, sizeof(unsigned char));
+@@ -644,9 +658,14 @@ unsigned char *ImageStream::getLine()
+     }
+ 
+     int readChars = str->doGetChars(inputLineSize, inputLine);
++#ifdef MAGMA_ENABLE_FIXES
+     if (unlikely(readChars == -1)) {
+         readChars = 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF007", readChars < 0);
++#endif
+     for (; readChars < inputLineSize; readChars++)
+         inputLine[readChars] = EOF;
+     if (nBits == 1) {
+diff --git a/poppler/XRef.cc b/poppler/XRef.cc
+index 3350f6e9..82eef911 100644
+--- a/poppler/XRef.cc
++++ b/poppler/XRef.cc
+@@ -1668,18 +1668,27 @@ DummyXRefEntry dummyXRefEntry;
+ 
+ XRefEntry *XRef::getEntry(int i, bool complainIfMissing)
+ {
++#ifdef MAGMA_ENABLE_FIXES
+     if (unlikely(i < 0)) {
+         error(errInternal, -1, "Request for invalid XRef entry [{0:d}]", i);
+         return &dummyXRefEntry;
+     }
+-
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF011", i < 0);
++#endif
+     if (i >= size || entries[i].type == xrefEntryNone) {
+ 
+         if ((!xRefStream) && mainXRefEntriesOffset) {
++#ifdef MAGMA_ENABLE_FIXES
+             if (unlikely(i >= capacity)) {
+                 error(errInternal, -1, "Request for out-of-bounds XRef entry [{0:d}]", i);
+                 return &dummyXRefEntry;
+             }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF014", i >= capacity);
++#endif
+ 
+             if (!parseEntry(mainXRefEntriesOffset + 20 * i, &entries[i])) {
+                 error(errSyntaxError, -1, "Failed to parse XRef entry [{0:d}].", i);
+diff --git a/splash/Splash.cc b/splash/Splash.cc
+index f5af0d60..b3e6c3e3 100644
+--- a/splash/Splash.cc
++++ b/splash/Splash.cc
+@@ -5666,6 +5666,7 @@ SplashError Splash::blitTransparent(SplashBitmap *src, int xSrc, int ySrc, int x
+         return splashErrZeroImage;
+     }
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (src->getWidth() - xSrc < width)
+         width = src->getWidth() - xSrc;
+ 
+@@ -5683,6 +5684,15 @@ SplashError Splash::blitTransparent(SplashBitmap *src, int xSrc, int ySrc, int x
+ 
+     if (height < 0)
+         height = 0;
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("PDF006", MAGMA_OR(src->getWidth() - xSrc < width, \
++                        MAGMA_OR(src->getHeight() - ySrc < height, \
++                        MAGMA_OR(bitmap->getWidth() - xDest < width, \
++                        bitmap->getHeight() - yDest < height))) \
++    );
++#endif
++#endif
+ 
+     switch (bitmap->mode) {
+     case splashModeMono1:
+diff --git a/splash/SplashXPathScanner.cc b/splash/SplashXPathScanner.cc
+index 98a49912..c2815e29 100644
+--- a/splash/SplashXPathScanner.cc
++++ b/splash/SplashXPathScanner.cc
+@@ -446,8 +446,13 @@ void SplashXPathScanner::clipAALine(SplashBitmap *aaBuf, int *x0, int *x1, int y
+         xx = *x0 * splashAASize;
+         if (yy >= yyMin && yy <= yyMax) {
+             const int intersectionIndex = splashAASize * y + yy - yMin;
++#ifdef MAGMA_ENABLE_FIXES
+             if (unlikely(intersectionIndex < 0 || (unsigned)intersectionIndex >= allIntersections.size()))
+                 break;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF004", MAGMA_OR(intersectionIndex < 0, (unsigned)intersectionIndex >= allIntersections.size()));
++#endif
+             const auto &line = allIntersections[intersectionIndex];
+             interIdx = 0;
+             interCount = 0;
+diff --git a/utils/HtmlOutputDev.cc b/utils/HtmlOutputDev.cc
+index bd55ac7d..273b8827 100644
+--- a/utils/HtmlOutputDev.cc
++++ b/utils/HtmlOutputDev.cc
+@@ -1396,8 +1396,15 @@ void HtmlOutputDev::drawPngImage(GfxState *state, Stream *str, int width, int he
+         int invert_bits = 0xff;
+         if (colorMap) {
+             GfxGray gray;
++#ifdef MAGMA_ENABLE_FIXES
+             unsigned char zero[gfxColorMaxComps];
++#else
++            unsigned char zero[1];
++#endif
+             memset(zero, 0, sizeof(zero));
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("PDF003", MAGMA_AND(colorMap->getColorSpace2() == nullptr, (size_t)colorMap->getNumPixelComps() > sizeof(zero)));
++#endif
+             colorMap->getGray(zero, &gray);
+             if (colToByte(gray) == 0)
+                 invert_bits = 0x00;
+diff --git a/utils/ImageOutputDev.cc b/utils/ImageOutputDev.cc
+index 4bb9d8ab..75efaffc 100644
+--- a/utils/ImageOutputDev.cc
++++ b/utils/ImageOutputDev.cc
+@@ -356,7 +356,11 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+     GfxRGB rgb;
+     GfxCMYK cmyk;
+     GfxGray gray;
++#ifdef MAGMA_ENABLE_FIXES
+     unsigned char zero[gfxColorMaxComps];
++#else
++    unsigned char zero[1];
++#endif
+     int invert_bits;
+ 
+     if (writer) {
+@@ -399,6 +403,9 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+     invert_bits = 0xff;
+     if (colorMap) {
+         memset(zero, 0, sizeof(zero));
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("PDF003", MAGMA_AND(colorMap->getColorSpace2() == nullptr, (size_t)colorMap->getNumPixelComps() > sizeof(zero)));
++#endif
+         colorMap->getGray(zero, &gray);
+         if (colToByte(gray) == 0)
+             invert_bits = 0x00;

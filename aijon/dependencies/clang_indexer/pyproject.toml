@@ -1,0 +1,35 @@
+[project]
+name = "clang_indexer"
+version = "0.1.0"
+description = "Clang Indexer is a tool for indexing C/C++ code using Clang"
+requires-python = ">=3.12"
+dependencies = [
+    "project_utils",
+    "loguru",
+    "pyyaml",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["clang_indexer"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F"]
+extend-select = ["E501"]
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "ipython>=8.31.0",
+    "pre-commit>=4.1.0",
+    "ruff>=0.9.4",
+]
+
+[tool.uv]
+package = true

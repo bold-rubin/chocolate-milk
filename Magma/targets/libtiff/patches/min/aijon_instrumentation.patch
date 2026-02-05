@@ -1,0 +1,45 @@
+diff --git a/libtiff/tif_dirread.c b/libtiff/tif_dirread.c
+index a6ff499e..ddbcad87 100644
+--- a/libtiff/tif_dirread.c
++++ b/libtiff/tif_dirread.c
+@@ -5924,6 +5924,7 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	uint32_t rowsperstrip;
+ 
+ 	bytecount = TIFFGetStrileByteCount(tif, 0);
++
+         /* On a newly created file, just re-opened to be filled, we */
+         /* don't want strip chop to trigger as it is going to cause issues */
+         /* later ( StripOffsets and StripByteCounts improperly filled) . */
+@@ -5937,6 +5938,7 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	else
+ 		rowblock = 1;
+ 	rowblockbytes = TIFFVTileSize64(tif, rowblock);
++
+ 	/*
+ 	 * Make the rows hold at least one scanline, but fill specified amount
+ 	 * of data if possible.
+@@ -5944,10 +5946,12 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	if (rowblockbytes > STRIP_SIZE_DEFAULT) {
+ 		stripbytes = rowblockbytes;
+ 		rowsperstrip = rowblock;
++
+ 	} else if (rowblockbytes > 0 ) {
+ 		uint32_t rowblocksperstrip;
+ 		rowblocksperstrip = (uint32_t) (STRIP_SIZE_DEFAULT / rowblockbytes);
+ 		rowsperstrip = rowblocksperstrip * rowblock;
++
+ 		stripbytes = rowblocksperstrip * rowblockbytes;
+ 	}
+ 	else
+@@ -5967,9 +5971,11 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+         if ((nstrips64==0)||(nstrips64>0xFFFFFFFF)) /* something is wonky, do nothing. */
+             return;
+         nstrips = (uint32_t)nstrips64;
++IJON_MIN((unsigned long long)TIFFhowmany_32(td->td_imagelength, rowsperstrip)); /* PATCHID:233 */
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("TIF007", nstrips > TIFFhowmany_32(td->td_imagelength, rowsperstrip));
++
+ #endif
+         /* If we are going to allocate a lot of memory, make sure that the */
+         /* file is as big as needed */

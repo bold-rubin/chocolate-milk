@@ -1,0 +1,9 @@
+1,libpng,libpng_read_fuzzer
+2,libsndfile,sndfile_fuzzer
+3,libtiff,tiff_read_rgba_fuzzer,tiffcp
+4,libxml2,libxml2_xml_read_memory_fuzzer,xmllint
+5,lua,lua
+6,openssl,asn1,asn1parse,bignum,server,client,x509
+7,php,json,exif,unserialize,parser
+8,poppler,pdf_fuzzer,pdfimages,pdftoppm
+9,sqlite3,sqlite3_fuzz

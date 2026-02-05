@@ -1,0 +1,720 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e87de753..c2bf18de 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -138,8 +138,6 @@ include(Release)
+ add_subdirectory(port)
+ add_subdirectory(libtiff)
+ add_subdirectory(tools)
+-add_subdirectory(test)
+-add_subdirectory(contrib)
+ add_subdirectory(build)
+ add_subdirectory(man)
+ add_subdirectory(html)
+diff --git a/autogen.sh b/autogen.sh
+index 9ef71b53..2a7d2c06 100755
+--- a/autogen.sh
++++ b/autogen.sh
+@@ -10,8 +10,9 @@ autoconf
+ for file in config.guess config.sub
+ do
+     echo "$0: getting $file..."
+-    wget -q --timeout=5 -O config/$file.tmp \
+-      "https://git.savannah.gnu.org/cgit/config.git/plain/${file}" \
++    # wget -q --timeout=5 -O config/$file.tmp \
++    #   "https://git.savannah.gnu.org/cgit/config.git/plain/${file}" \
++    cp $TARGET/patches/setup/$file config/$file.tmp \
+       && mv config/$file.tmp config/$file \
+       && chmod a+x config/$file
+     retval=$?
+diff --git a/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc b/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc
+index e37650af..94681d84 100644
+--- a/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc
++++ b/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc
+@@ -33,7 +33,7 @@
+ /* safe multiply returns either the multiplied value or 0 if it overflowed */
+ #define __TIFFSafeMultiply(t,v,m) ((((t)(m) != (t)0) && (((t)(((v)*(m))/(m))) == (t)(v))) ? (t)((v)*(m)) : (t)0)
+ 
+-const uint64_t MAX_SIZE = 500000000;
++const uint64 MAX_SIZE = 500000000;
+ 
+ extern "C" void handle_error(const char *unused, const char *unused2, va_list unused3) {
+     return;
+@@ -57,8 +57,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+   if (!tif) {
+       return 0;
+   }
+-  uint32_t w, h;
+-  uint32_t* raster;
++  uint32 w, h;
++  uint32* raster;
+ 
+   TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
+   TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
+@@ -67,29 +67,29 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+       TIFFClose(tif);
+       return 0;
+   }
+-  uint64_t bufsize = TIFFTileSize64(tif);
++  uint64 bufsize = TIFFTileSize64(tif);
+   /* don't continue if the buffer size greater than the max allowed by the fuzzer */
+   if (bufsize > MAX_SIZE || bufsize == 0) {
+       TIFFClose(tif);
+       return 0;
+   }
+   /* another hack to work around an OOM in tif_fax3.c */
+-  uint32_t tilewidth = 0;
+-  uint32_t imagewidth = 0;
++  uint32 tilewidth = 0, tilewidth2;
++  uint32 imagewidth = 0;
+   TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tilewidth);
+   TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &imagewidth);
+-  tilewidth = __TIFFSafeMultiply(uint32_t, tilewidth, 2);
+-  imagewidth = __TIFFSafeMultiply(uint32_t, imagewidth, 2);
+-  if (tilewidth * 2 > MAX_SIZE || imagewidth * 2 > MAX_SIZE || tilewidth == 0 || imagewidth == 0) {
++  tilewidth2 = __TIFFSafeMultiply(uint32, tilewidth, 2);
++  imagewidth = __TIFFSafeMultiply(uint32, imagewidth, 2);
++  if (tilewidth2 * 2 > MAX_SIZE || imagewidth * 2 > MAX_SIZE || (tilewidth != 0 && tilewidth2 == 0) || imagewidth == 0) {
+       TIFFClose(tif);
+       return 0;
+   }
+-  uint32_t size = __TIFFSafeMultiply(uint32_t, w, h);
++  uint32 size = __TIFFSafeMultiply(uint32, w, h);
+   if (size > MAX_SIZE || size == 0) {
+       TIFFClose(tif);
+       return 0;
+   }
+-  raster = (uint32_t*) _TIFFmalloc(size * sizeof (uint32_t));
++  raster = (uint32*) _TIFFmalloc(size * sizeof (uint32));
+   if (raster != NULL) {
+       TIFFReadRGBAImage(tif, w, h, raster, 0);
+       _TIFFfree(raster);
+@@ -97,83 +97,4 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
+   TIFFClose(tif);
+ 
+   return 0;
+-}
+-
+-#ifdef STANDALONE
+-
+-template<class T> static void CPL_IGNORE_RET_VAL(T) {}
+-
+-static void Usage(int, char* argv[])
+-{
+-    fprintf(stderr, "%s [--help] [-repeat N] filename.\n", argv[0]);
+-    exit(1);
+-}
+-
+-int main(int argc, char* argv[])
+-{
+-    int nRet = 0;
+-    void* buf = NULL;
+-    int nLen = 0;
+-    int nLoops = 1;
+-    const char* pszFilename = NULL;
+-
+-    for(int i = 1; i < argc; i++ )
+-    {
+-        if( i + 1 < argc && strcmp(argv[i], "-repeat") == 0 )
+-        {
+-            nLoops = atoi(argv[i+1]);
+-            i++;
+-        }
+-        else if( strcmp(argv[i], "-dummy") == 0 )
+-        {
+-            uint8_t dummy = ' ';
+-            return LLVMFuzzerTestOneInput(&dummy, 1);
+-        }
+-        else if( strcmp(argv[i], "--help") == 0 )
+-        {
+-            Usage(argc, argv);
+-        }
+-        else if( argv[i][0] == '-' )
+-        {
+-            fprintf(stderr, "Unrecognized option: %s", argv[i]);
+-            Usage(argc, argv);
+-        }
+-        else
+-        {
+-            pszFilename = argv[i];
+-        }
+-    }
+-    if( pszFilename == nullptr )
+-    {
+-        fprintf(stderr, "No filename specified\n");
+-        Usage(argc, argv);
+-    }
+-    FILE* f = fopen(pszFilename, "rb");
+-    if( !f )
+-    {
+-        fprintf(stderr, "%s does not exist.\n", pszFilename);
+-        exit(1);
+-    }
+-    fseek(f, 0, SEEK_END);
+-    nLen = (int)ftell(f);
+-    fseek(f, 0, SEEK_SET);
+-    buf = malloc(nLen);
+-    if( !buf )
+-    {
+-        fprintf(stderr, "malloc failed.\n");
+-        fclose(f);
+-        exit(1);
+-    }
+-    CPL_IGNORE_RET_VAL(fread(buf, nLen, 1, f));
+-    fclose(f);
+-    for( int i = 0; i < nLoops; i++ )
+-    {
+-        nRet = LLVMFuzzerTestOneInput(static_cast<const uint8_t*>(buf), nLen);
+-        if( nRet != 0 )
+-            break;
+-    }
+-    free(buf);
+-    return nRet;
+-}
+-
+-#endif
++}
+\ No newline at end of file
+diff --git a/libtiff/tif_dir.c b/libtiff/tif_dir.c
+index a6c254fc..376b6c8e 100644
+--- a/libtiff/tif_dir.c
++++ b/libtiff/tif_dir.c
+@@ -118,7 +118,7 @@ setExtraSamples(TIFF* tif, va_list ap, uint32_t* v)
+ 				return 0;
+ 		}
+ 	}
+-
++#ifdef MAGMA_ENABLE_FIXES
+         if ( td->td_transferfunction[0] != NULL && (td->td_samplesperpixel - *v > 1) &&
+                 !(td->td_samplesperpixel - td->td_extrasamples > 1))
+         {
+@@ -129,6 +129,11 @@ setExtraSamples(TIFF* tif, va_list ap, uint32_t* v)
+                 _TIFFfree(td->td_transferfunction[0]);
+                 td->td_transferfunction[0] = NULL;
+         }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("TIF012", MAGMA_AND(td->td_transferfunction[0] != NULL, MAGMA_AND(td->td_samplesperpixel - *v > 1, \
++            !(td->td_samplesperpixel - td->td_extrasamples > 1))));
++#endif
+ 
+ 	td->td_extrasamples = (uint16_t) *v;
+ 	_TIFFsetShortArray(&td->td_sampleinfo, va, td->td_extrasamples);
+@@ -271,6 +276,7 @@ _TIFFVSetField(TIFF* tif, uint32_t tag, va_list ap)
+ 			goto badvalue;
+         if( v != td->td_samplesperpixel )
+         {
++#ifdef MAGMA_ENABLE_FIXES
+             /* See http://bugzilla.maptools.org/show_bug.cgi?id=2500 */
+             if( td->td_sminsamplevalue != NULL )
+             {
+@@ -302,6 +308,13 @@ _TIFFVSetField(TIFF* tif, uint32_t tag, va_list ap)
+                     _TIFFfree(td->td_transferfunction[0]);
+                     td->td_transferfunction[0] = NULL;
+             }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("TIF012", MAGMA_OR(td->td_sminsamplevalue != NULL, \
++                MAGMA_OR(td->td_smaxsamplevalue != NULL, \
++                MAGMA_AND(td->td_transferfunction[0] != NULL, MAGMA_AND(v - td->td_extrasamples > 1, \
++                   !(td->td_samplesperpixel - td->td_extrasamples > 1))))));
++#endif
+         }
+ 		td->td_samplesperpixel = (uint16_t) v;
+ 		break;
+diff --git a/libtiff/tif_dirread.c b/libtiff/tif_dirread.c
+index d84147a0..707450b3 100644
+--- a/libtiff/tif_dirread.c
++++ b/libtiff/tif_dirread.c
+@@ -5879,7 +5879,11 @@ static void allocChoppedUpStripArrays(TIFF* tif, uint32_t nstrips,
+         if (stripbytes > bytecount)
+             stripbytes = bytecount;
+         newcounts[i] = stripbytes;
++#ifdef MAGMA_ENABLE_FIXES
+         newoffsets[i] = stripbytes ? offset : 0;
++#else
++        newoffsets[i] = offset;
++#endif
+         offset += stripbytes;
+         bytecount -= stripbytes;
+     }
+@@ -5954,12 +5958,22 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	 */
+ 	if (rowsperstrip >= td->td_rowsperstrip)
+ 		return;
++#ifdef MAGMA_ENABLE_FIXES
+         nstrips = TIFFhowmany_32(td->td_imagelength, rowsperstrip);
+         if( nstrips == 0 )
+             return;
+-
++#else
++        uint64_t nstrips64 = TIFFhowmany_64(bytecount, stripbytes);
++        if ((nstrips64==0)||(nstrips64>0xFFFFFFFF)) /* something is wonky, do nothing. */
++            return;
++        nstrips = (uint32_t)nstrips64;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("TIF007", nstrips > TIFFhowmany_32(td->td_imagelength, rowsperstrip));
++#endif
+         /* If we are going to allocate a lot of memory, make sure that the */
+         /* file is as big as needed */
++#ifdef MAGMA_ENABLE_FIXES
+         if( tif->tif_mode == O_RDONLY &&
+             nstrips > 1000000 &&
+             (offset >= TIFFGetFileSize(tif) ||
+@@ -5967,6 +5981,13 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+         {
+             return;
+         }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("TIF014", MAGMA_AND(tif->tif_mode == O_RDONLY, \
++	        MAGMA_AND(nstrips > 1000000, \
++	        MAGMA_OR(offset >= TIFFGetFileSize(tif), \
++	         stripbytes * (nstrips - 1) > (TIFFGetFileSize(tif) - offset)))));
++#endif
+ 
+         allocChoppedUpStripArrays(tif, nstrips, stripbytes, rowsperstrip);
+ }
+diff --git a/libtiff/tif_dirwrite.c b/libtiff/tif_dirwrite.c
+index 032a4be9..1e111fd0 100644
+--- a/libtiff/tif_dirwrite.c
++++ b/libtiff/tif_dirwrite.c
+@@ -2101,14 +2101,28 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 		n=3;
+ 	if (n==3)
+ 	{
++#ifdef MAGMA_ENABLE_CANARIES
++		MAGMA_LOG("TIF009", tif->tif_dir.td_transferfunction[2] == NULL);
++#endif
++#ifdef MAGMA_ENABLE_FIXES
+ 		if (tif->tif_dir.td_transferfunction[2] == NULL ||
+ 		    !_TIFFmemcmp(tif->tif_dir.td_transferfunction[0],tif->tif_dir.td_transferfunction[2],m*sizeof(uint16_t)))
++#else
++		if (!_TIFFmemcmp(tif->tif_dir.td_transferfunction[0],tif->tif_dir.td_transferfunction[2],m*sizeof(uint16_t)))
++#endif
+ 			n=2;
+ 	}
+ 	if (n==2)
+ 	{
++#ifdef MAGMA_ENABLE_CANARIES
++		MAGMA_LOG("TIF009", tif->tif_dir.td_transferfunction[1] == NULL);
++#endif
++#ifdef MAGMA_ENABLE_FIXES
+ 		if (tif->tif_dir.td_transferfunction[1] == NULL ||
+ 		    !_TIFFmemcmp(tif->tif_dir.td_transferfunction[0],tif->tif_dir.td_transferfunction[1],m*sizeof(uint16_t)))
++#else
++		if (!_TIFFmemcmp(tif->tif_dir.td_transferfunction[0],tif->tif_dir.td_transferfunction[1],m*sizeof(uint16_t)))
++#endif
+ 			n=1;
+ 	}
+ 	if (n==0)
+diff --git a/libtiff/tif_jbig.c b/libtiff/tif_jbig.c
+index 74086338..72a4e665 100644
+--- a/libtiff/tif_jbig.c
++++ b/libtiff/tif_jbig.c
+@@ -106,12 +106,21 @@ static int JBIGDecode(TIFF* tif, uint8_t* buffer, tmsize_t size, uint16_t s)
+ 	}
+ 	else if( (tmsize_t)decodedSize > size )
+ 	{
++#ifdef MAGMA_ENABLE_FIXES
+ 	    TIFFErrorExt(tif->tif_clientdata, "JBIG",
+ 	                 "Decoded %lu bytes, whereas %"TIFF_SSIZE_FORMAT" were requested",
+ 	                 decodedSize, size);
+ 	    jbg_dec_free(&decoder);
+ 	    return 0;
++#else
++	    TIFFWarningExt(tif->tif_clientdata, "JBIG",
++	                 "Decoded %lu bytes, whereas %lu were requested",
++	                 decodedSize, (unsigned long)size);
++#endif
+ 	}
++#ifdef MAGMA_ENABLE_CANARIES
++	MAGMA_LOG("TIF013", (tmsize_t)decodedSize > size);
++#endif
+ 	pImage = jbg_dec_getimage(&decoder, 0);
+ 	_TIFFmemcpy(buffer, pImage, decodedSize);
+ 	jbg_dec_free(&decoder);
+diff --git a/libtiff/tif_luv.c b/libtiff/tif_luv.c
+index 13765eab..fcdce0ba 100644
+--- a/libtiff/tif_luv.c
++++ b/libtiff/tif_luv.c
+@@ -1566,7 +1566,9 @@ LogLuvClose(TIFF* tif)
+ 	 * before they have been recorded in the file, we reset them here.
+          * Note: this is really a nasty approach. See PixarLogClose
+ 	 */
++#ifdef MAGMA_ENABLE_FIXES
+         if( sp->encoder_state )
++#endif
+         {
+             /* See PixarLogClose. Might avoid issues with tags whose size depends
+              * on those below, but not completely sure this is enough. */
+@@ -1575,6 +1577,9 @@ LogLuvClose(TIFF* tif)
+             td->td_bitspersample = 16;
+             td->td_sampleformat = SAMPLEFORMAT_INT;
+         }
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF005", sp->encoder_state == 0);
++#endif
+ }
+ 
+ static void
+diff --git a/libtiff/tif_lzw.c b/libtiff/tif_lzw.c
+index 2f9bfb84..1448efa5 100644
+--- a/libtiff/tif_lzw.c
++++ b/libtiff/tif_lzw.c
+@@ -749,9 +749,16 @@ LZWDecodeCompat(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 			len = codep->length;
+ 			tp = op + len;
+ 			do {
++#ifdef MAGMA_ENABLE_CANARIES
++				MAGMA_LOG("TIF010", tp <= op); // or use == instead of <= so the bug is reported once only
++#endif
+ 				*--tp = codep->value;
+ 				codep = codep->next;
++#ifdef MAGMA_ENABLE_FIXES
+ 			} while (codep && tp > op);
++#else
++			} while (codep);
++#endif
+ 			assert(occ >= len);
+ 			op += len;
+ 			occ -= len;
+diff --git a/libtiff/tif_next.c b/libtiff/tif_next.c
+index 695fc5d4..a64419cf 100644
+--- a/libtiff/tif_next.c
++++ b/libtiff/tif_next.c
+@@ -122,15 +122,26 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ 				 * bounds, potentially resulting in a security
+ 				 * issue.
+ 				 */
++#ifdef MAGMA_ENABLE_FIXES
+ 				while (n-- > 0 && npixels < imagewidth && op_offset < scanline)
++#else
++                while (n-- > 0 && npixels < imagewidth)
++#endif
++                {
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("TIF008", op_offset >= scanline);
++#endif
+ 					SETPIXEL(op, grey);
++                }
+ 				if (npixels >= imagewidth)
+ 					break;
++#ifdef MAGMA_ENABLE_FIXES
+                 if (op_offset >= scanline ) {
+                     TIFFErrorExt(tif->tif_clientdata, module, "Invalid data for scanline %"PRIu32,
+                         tif->tif_row);
+                     return (0);
+                 }
++#endif
+ 				if (cc == 0)
+ 					goto bad;
+ 				n = *bp++;
+diff --git a/libtiff/tif_ojpeg.c b/libtiff/tif_ojpeg.c
+index 66cd275f..12c99691 100644
+--- a/libtiff/tif_ojpeg.c
++++ b/libtiff/tif_ojpeg.c
+@@ -790,6 +790,7 @@ OJPEGDecode(TIFF* tif, uint8_t* buf, tmsize_t cc, uint16_t s)
+         static const char module[]="OJPEGDecode";
+ 	OJPEGState* sp=(OJPEGState*)tif->tif_data;
+ 	(void)s;
++#ifdef MAGMA_ENABLE_FIXES
+         if( !sp->decoder_ok )
+         {
+             TIFFErrorExt(tif->tif_clientdata,module,"Cannot decode: decoder not correctly initialized");
+@@ -799,6 +800,10 @@ OJPEGDecode(TIFF* tif, uint8_t* buf, tmsize_t cc, uint16_t s)
+         {
+             return 0;
+         }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF004", sp->decoder_ok == 0);
++#endif
+ 	if (sp->libjpeg_jpeg_query_style==0)
+ 	{
+ 		if (OJPEGDecodeRaw(tif,buf,cc)==0)
+diff --git a/libtiff/tif_pixarlog.c b/libtiff/tif_pixarlog.c
+index 87c67097..528de93e 100644
+--- a/libtiff/tif_pixarlog.c
++++ b/libtiff/tif_pixarlog.c
+@@ -798,12 +798,17 @@ PixarLogDecode(TIFF* tif, uint8_t* op, tmsize_t occ, uint16_t s)
+ 		TIFFErrorExt(tif->tif_clientdata, module, "ZLib cannot deal with buffers this size");
+ 		return (0);
+ 	}
++#ifdef MAGMA_ENABLE_FIXES
+ 	/* Check that we will not fill more than what was allocated */
+ 	if ((tmsize_t)sp->stream.avail_out > sp->tbuf_size)
+ 	{
+ 		TIFFErrorExt(tif->tif_clientdata, module, "sp->stream.avail_out > sp->tbuf_size");
+ 		return (0);
+ 	}
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++	MAGMA_LOG("TIF002", (tmsize_t)sp->stream.avail_out > sp->tbuf_size);
++#endif
+ 	do {
+ 		int state = inflate(&sp->stream, Z_PARTIAL_FLUSH);
+ 		if (state == Z_STREAM_END) {
+@@ -1261,8 +1266,10 @@ PixarLogClose(TIFF* tif)
+ 	 * readers that don't know about PixarLog, or how to set
+ 	 * the PIXARLOGDATFMT pseudo-tag.
+ 	 */
+-
+-        if (sp->state&PLSTATE_INIT) {
++#ifdef MAGMA_ENABLE_FIXES
++        if (sp->state&PLSTATE_INIT)
++#endif
++        {
+             /* We test the state to avoid an issue such as in
+              * http://bugzilla.maptools.org/show_bug.cgi?id=2604
+              * What appends in that case is that the bitspersample is 1 and
+@@ -1274,6 +1281,9 @@ PixarLogClose(TIFF* tif)
+             td->td_bitspersample = 8;
+             td->td_sampleformat = SAMPLEFORMAT_UINT;
+         }
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF006", (sp->state&PLSTATE_INIT) == 0);
++#endif
+ }
+ 
+ static void
+diff --git a/libtiff/tif_predict.c b/libtiff/tif_predict.c
+index 4aa4af69..cdb9ccb5 100644
+--- a/libtiff/tif_predict.c
++++ b/libtiff/tif_predict.c
+@@ -282,12 +282,17 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	tmsize_t stride = PredictorState(tif)->stride;
+ 
+ 	unsigned char* cp = (unsigned char*) cp0;
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%stride)!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "horAcc8",
+                      "%s", "(cc%stride)!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%stride)!=0);
++#endif
+ 
+ 	if (cc > stride) {
+ 		/*
+@@ -307,6 +312,7 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 				cp += 3;
+ 			}
+ 		} else if (stride == 4)  {
++
+ 			unsigned int cr = cp[0];
+ 			unsigned int cg = cp[1];
+ 			unsigned int cb = cp[2];
+@@ -351,12 +357,17 @@ horAcc16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	uint16_t* wp = (uint16_t*) cp0;
+ 	tmsize_t wc = cc / 2;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%(2*stride))!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "horAcc16",
+                      "%s", "cc%(2*stride))!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%(2*stride))!=0);
++#endif
+ 
+ 	if (wc > stride) {
+ 		wc -= stride;
+@@ -386,12 +397,17 @@ horAcc32(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	uint32_t* wp = (uint32_t*) cp0;
+ 	tmsize_t wc = cc / 4;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%(4*stride))!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "horAcc32",
+                      "%s", "cc%(4*stride))!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%(4*stride))!=0);
++#endif
+ 
+ 	if (wc > stride) {
+ 		wc -= stride;
+@@ -416,12 +432,17 @@ fpAcc(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	uint8_t *cp = (uint8_t *) cp0;
+ 	uint8_t *tmp;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if(cc%(bps*stride)!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "fpAcc",
+                      "%s", "cc%(bps*stride))!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%(bps*stride))!=0);
++#endif
+ 
+     tmp = (uint8_t *)_TIFFmalloc(cc);
+ 	if (!tmp)
+@@ -486,12 +507,19 @@ PredictorDecodeTile(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 	if ((*sp->decodetile)(tif, op0, occ0, s)) {
+ 		tmsize_t rowsize = sp->rowsize;
+ 		assert(rowsize > 0);
++
++#ifdef MAGMA_ENABLE_FIXES
+ 		if((occ0%rowsize) !=0)
+         {
+             TIFFErrorExt(tif->tif_clientdata, "PredictorDecodeTile",
+                          "%s", "occ0%rowsize != 0");
+             return 0;
+         }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("TIF001", (occ0%rowsize)!=0);
++#endif
++
+ 		assert(sp->decodepfunc != NULL);
+ 		while (occ0 > 0) {
+ 			if( !(*sp->decodepfunc)(tif, op0, rowsize) )
+@@ -512,12 +540,17 @@ horDiff8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	tmsize_t stride = sp->stride;
+ 	unsigned char* cp = (unsigned char*) cp0;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%stride)!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "horDiff8",
+                      "%s", "(cc%stride)!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%stride)!=0);
++#endif
+ 
+ 	if (cc > stride) {
+ 		cc -= stride;
+@@ -567,12 +600,17 @@ horDiff16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	uint16_t *wp = (uint16_t*) cp0;
+ 	tmsize_t wc = cc/2;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%(2*stride))!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "horDiff8",
+                      "%s", "(cc%(2*stride))!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%(2*stride))!=0);
++#endif
+ 
+ 	if (wc > stride) {
+ 		wc -= stride;
+@@ -607,12 +645,17 @@ horDiff32(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	uint32_t *wp = (uint32_t*) cp0;
+ 	tmsize_t wc = cc/4;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%(4*stride))!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "horDiff32",
+                      "%s", "(cc%(4*stride))!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%(4*stride))!=0);
++#endif
+ 
+ 	if (wc > stride) {
+ 		wc -= stride;
+@@ -652,12 +695,17 @@ fpDiff(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	uint8_t *cp = (uint8_t *) cp0;
+ 	uint8_t *tmp;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if((cc%(bps*stride))!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "fpDiff",
+                      "%s", "(cc%(bps*stride))!=0");
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc%(bps*stride))!=0);
++#endif
+ 
+     tmp = (uint8_t *)_TIFFmalloc(cc);
+ 	if (!tmp)
+@@ -730,6 +778,8 @@ PredictorEncodeTile(TIFF* tif, uint8_t* bp0, tmsize_t cc0, uint16_t s)
+ 
+ 	rowsize = sp->rowsize;
+ 	assert(rowsize > 0);
++
++#ifdef MAGMA_ENABLE_FIXES
+ 	if((cc0%rowsize)!=0)
+     {
+         TIFFErrorExt(tif->tif_clientdata, "PredictorEncodeTile",
+@@ -737,6 +787,11 @@ PredictorEncodeTile(TIFF* tif, uint8_t* bp0, tmsize_t cc0, uint16_t s)
+         _TIFFfree( working_copy );
+         return 0;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF001", (cc0%rowsize)!=0);
++#endif
++
+ 	while (cc > 0) {
+ 		(*sp->encodepfunc)(tif, bp, rowsize);
+ 		cc -= rowsize;
+diff --git a/libtiff/tif_print.c b/libtiff/tif_print.c
+index 6e9f58ff..d4dc7716 100644
+--- a/libtiff/tif_print.c
++++ b/libtiff/tif_print.c
+@@ -539,9 +539,18 @@ TIFFPrintDirectory(TIFF* tif, FILE* fd, long flags)
+ 				uint16_t i;
+ 				fprintf(fd, "    %2ld: %5"PRIu16,
+ 				    l, td->td_transferfunction[0][l]);
++#ifdef MAGMA_ENABLE_FIXES
+ 				for (i = 1; i < td->td_samplesperpixel - td->td_extrasamples && i < 3; i++)
++#else
++				for (i = 1; i < td->td_samplesperpixel; i++)
++#endif
++				{
++#ifdef MAGMA_ENABLE_CANARIES
++					MAGMA_LOG("TIF011", MAGMA_OR(i == sizeof(td->td_transferfunction) / sizeof(*td->td_transferfunction), i == (td->td_samplesperpixel - td->td_extrasamples)));
++#endif
+ 					fprintf(fd, " %5"PRIu16,
+ 					    td->td_transferfunction[i][l]);
++				}
+ 				fputc('\n', fd);
+ 			}
+ 		} else
+diff --git a/libtiff/tif_read.c b/libtiff/tif_read.c
+index a4c60b4f..1c7045e2 100644
+--- a/libtiff/tif_read.c
++++ b/libtiff/tif_read.c
+@@ -484,7 +484,14 @@ static tmsize_t TIFFReadEncodedStripGetStripSize(TIFF* tif, uint32_t strip, uint
+ 	rowsperstrip=td->td_rowsperstrip;
+ 	if (rowsperstrip>td->td_imagelength)
+ 		rowsperstrip=td->td_imagelength;
++#ifdef MAGMA_ENABLE_FIXES
+ 	stripsperplane= TIFFhowmany_32_maxuint_compat(td->td_imagelength, rowsperstrip);
++#else
++    stripsperplane=((td->td_imagelength+rowsperstrip-1)/rowsperstrip);
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("TIF003", stripsperplane == 0);
++#endif
+ 	stripinplane=(strip%stripsperplane);
+ 	if( pplane ) *pplane=(uint16_t)(strip / stripsperplane);
+ 	rows=td->td_imagelength-stripinplane*rowsperstrip;
