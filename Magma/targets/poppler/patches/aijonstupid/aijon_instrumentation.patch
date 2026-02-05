@@ -1,0 +1,854 @@
+diff --git a/fofi/FoFiTrueType.cc b/fofi/FoFiTrueType.cc
+index 478c2b6c..48d94022 100644
+--- a/fofi/FoFiTrueType.cc
++++ b/fofi/FoFiTrueType.cc
+@@ -1281,6 +1281,7 @@ void FoFiTrueType::cvtSfnts(FoFiOutputFunc outputFunc, void *outputStream, const
+             } else if (needVerticalMetrics && i == t42VmtxTable) {
+                 length = 4 + (nGlyphs - 1) * 2;
+                 vmtxTabLength = length;
++IJON_MAX((unsigned long long)vmtxTabLength); /* PATCHID:36889 */
+                 vmtxTab = (unsigned char *)gmalloc(length);
+                 vmtxTab[0] = advance / 256;
+                 vmtxTab[1] = advance % 256;
+@@ -1394,11 +1395,14 @@ void FoFiTrueType::cvtSfnts(FoFiOutputFunc outputFunc, void *outputStream, const
+             // already reported during the construction of the table
+             // headers
+             if ((length = newTables[i].len) > 0) {
++IJON_MAX((unsigned long long)length); /* PATCHID:36062 */
+                 if ((j = seekTable(t42Tables[i].tag)) >= 0 && checkRegion(tables[j].offset, tables[j].len)) {
+                     dumpString(file + tables[j].offset, tables[j].len, outputFunc, outputStream);
+                 } else if (needVerticalMetrics && i == t42VheaTable) {
++IJON_CMP((unsigned long long)i, (unsigned long long)t42VheaTable); /* PATCHID:35066 */
+ #ifdef MAGMA_ENABLE_FIXES
+                     if (unlikely(length > (int)sizeof(vheaTab))) {
++IJON_DIST((long long)length, (long long)sizeof(vheaTab)); /* PATCHID:34757 */
+                         error(errSyntaxWarning, -1, "length bigger than vheaTab size");
+                         length = sizeof(vheaTab);
+                     }
+@@ -1409,8 +1413,10 @@ void FoFiTrueType::cvtSfnts(FoFiOutputFunc outputFunc, void *outputStream, const
+ #endif
+                     dumpString(vheaTab, length, outputFunc, outputStream);
+                 } else if (needVerticalMetrics && i == t42VmtxTable) {
++IJON_CMP((unsigned long long)i, (unsigned long long)t42VmtxTable); /* PATCHID:34339 */
+ #ifdef MAGMA_ENABLE_FIXES
+                     if (unlikely(length > vmtxTabLength)) {
++IJON_DIST((long long)length, (long long)vmtxTabLength); /* PATCHID:34020 */
+                         error(errSyntaxWarning, -1, "length bigger than vmtxTab size");
+                         length = vmtxTabLength;
+                     }
+diff --git a/fofi/FoFiType1C.cc b/fofi/FoFiType1C.cc
+index 18963a1a..83864d9e 100644
+--- a/fofi/FoFiType1C.cc
++++ b/fofi/FoFiType1C.cc
+@@ -1129,6 +1129,7 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+     }
+ 
+     auto offsetEmplaceResult = offsetBeingParsed.emplace(offset);
++IJON_SET((int)offset); /* PATCHID:30682 */
+ 
+     start = charBuf->getLength();
+     if (top) {
+@@ -1143,16 +1144,20 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+     }
+ 
+     pos = offset;
++IJON_MAX((unsigned long long)(offset + nBytes - pos)); /* PATCHID:33658 */
+     while (pos < offset + nBytes) {
+         ok = true;
++IJON_INC((int)pos); /* PATCHID:30002 */
+         pos = getOp(pos, true, &ok);
+         if (!ok) {
+             break;
+         }
++IJON_SET((int)ops[nOps].op); /* PATCHID:32972 */
+         if (!ops[nOps - 1].isNum) {
+             --nOps; // drop the operator
+             switch (ops[nOps].op) {
+             case 0x0001: // hstem
++IJON_SET((int)ops[nOps].op); /* PATCHID:29284 */
+                 if (firstOp) {
+                     cvtGlyphWidth(nOps & 1, charBuf, pDict);
+                     firstOp = false;
+@@ -1279,15 +1284,20 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+                 openPath = true;
+                 break;
+             case 0x000a: // callsubr
++IJON_CMP((unsigned long long)val.pos, (unsigned long long)offset); /* PATCHID:32799 */
+                 if (nOps >= 1) {
++IJON_SET((int)k); /* PATCHID:28394 */
+                     subrBias = (subrIdx->len < 1240) ? 107 : (subrIdx->len < 33900) ? 1131 : 32768;
+                     k = subrBias + (int)ops[nOps - 1].num;
++IJON_CMP((unsigned long long)val.pos, (unsigned long long)offset); /* PATCHID:27639 */
+                     --nOps;
+                     ok = true;
+                     getIndexVal(subrIdx, k, &val, &ok);
+ #ifdef MAGMA_ENABLE_FIXES
+                     if (likely(ok && val.pos != offset)) {
++IJON_SET((int)(val.pos == offset)); /* PATCHID:27303 */
+ #else
++IJON_CTX(477); /* PATCHID:32135 */
+ #ifdef MAGMA_ENABLE_CANARIES
+                     MAGMA_LOG("%MAGMA_BUG%", val.pos == offset);
+ #endif
+@@ -1520,6 +1530,7 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+                     cvtNum(0, false, charBuf);
+                     charBuf->append((char)8);
+                 }
++IJON_CMP((unsigned long long)val.pos, (unsigned long long)offset); /* PATCHID:31382 */
+                 nOps = 0;
+                 openPath = true;
+                 break;
+@@ -1532,6 +1543,7 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf, const Type
+ #ifdef MAGMA_ENABLE_FIXES
+                     if (likely(ok && val.pos != offset)) {
+ #else
++IJON_CTX(33); /* PATCHID:30829 */
+ #ifdef MAGMA_ENABLE_CANARIES
+                     MAGMA_LOG("%MAGMA_BUG%", val.pos == offset);
+ #endif
+diff --git a/poppler/.gitignore b/poppler/.gitignore
+index 73e9b196..e37b12eb 100644
+--- a/poppler/.gitignore
++++ b/poppler/.gitignore
+@@ -1,10 +1,22 @@
+-.cvsignore
+-.deps
+-.libs
+ Makefile
+-Makefile.in
+-*.la
+-*.lo
+-*.loT
+-poppler-config.h
+-stamp-h2
++ChangeLog
++gtkdoc.pyc
++poppler-cairo.pc
++poppler-cpp.pc
++poppler-glib.pc
++poppler-qt.pc
++poppler-qt5.pc
++poppler-splash.pc
++poppler.pc
++gtk-doc.make
++*.o
++*~
++*.exe
++poppler-cairo-uninstalled.pc
++poppler-cpp-uninstalled.pc
++poppler-glib-uninstalled.pc
++poppler-qt-uninstalled.pc
++poppler-qt5-uninstalled.pc
++poppler-splash-uninstalled.pc
++poppler-uninstalled.pc
++/build/
+diff --git a/poppler/Annot.cc b/poppler/Annot.cc
+index c5178349..9bce3737 100644
+--- a/poppler/Annot.cc
++++ b/poppler/Annot.cc
+@@ -6047,9 +6047,12 @@ void AnnotInk::draw(Gfx *gfx, bool printing)
+         appearBBox->setBorderWidth(std::max(1., border->getWidth()));
+ 
+         for (int i = 0; i < inkListLength; ++i) {
++IJON_INC((int)i); /* PATCHID:811 */
++IJON_SET((int)inkListLength); /* PATCHID:526 */
+             const AnnotPath *path = inkList[i];
+ #ifdef MAGMA_ENABLE_FIXES
+             if (path && path->getCoordsLength() != 0) {
++IJON_CMP((unsigned long long)path, (unsigned long long)0); /* PATCHID:510 */
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+             MAGMA_LOG("%MAGMA_BUG%", !path);
+diff --git a/poppler/FileSpec.cc b/poppler/FileSpec.cc
+index 9209b8ed..473a4c8c 100644
+--- a/poppler/FileSpec.cc
++++ b/poppler/FileSpec.cc
+@@ -107,7 +107,10 @@ bool EmbFile::save2(FILE *f)
+     MAGMA_LOG("%MAGMA_BUG%", !m_objStr.isStream());
+ #endif
+     m_objStr.streamReset();
++IJON_CTX(22); /* PATCHID:75142 */
+     while ((c = m_objStr.streamGetChar()) != EOF) {
++IJON_SET(c); /* PATCHID:75044 */
++IJON_INC(c); /* PATCHID:74844 */
+         fputc(c, f);
+     }
+     return true;
+@@ -132,11 +135,13 @@ FileSpec::FileSpec(const Object *fileSpecA)
+     fileName = obj1.getString()->copy();
+ 
+     if (fileSpec.isDict()) {
++IJON_CTX(279); /* PATCHID:74676 */
+         obj1 = fileSpec.dictLookup("EF");
+         if (obj1.isDict()) {
+             fileStream = obj1.dictLookupNF("F").copy();
+             if (!fileStream.isRef()) {
+                 ok = false;
++IJON_SET((int)ok); /* PATCHID:74117 */
+                 fileStream.setToNull();
+                 error(errSyntaxError, -1, "Invalid FileSpec: Embedded file stream is not an indirect reference");
+                 return;
+@@ -154,8 +159,10 @@ FileSpec::FileSpec(const Object *fileSpecA)
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", !fileSpec.isDict());
++IJON_INC(1); /* PATCHID:73272 */
+ #endif
+     obj1 = fileSpec.dictLookup("Desc");
++IJON_SET(1); /* PATCHID:73069 */
+     if (obj1.isString())
+             desc = obj1.getString()->copy();
+ #endif
+diff --git a/poppler/GfxState.cc b/poppler/GfxState.cc
+index 27fc0eaf..ba6cc075 100644
+--- a/poppler/GfxState.cc
++++ b/poppler/GfxState.cc
+@@ -2668,12 +2668,14 @@ void GfxSeparationColorSpace::getGray(const GfxColor *color, GfxGray *gray) cons
+ #ifdef MAGMA_ENABLE_FIXES
+     if (alt->getMode() == csDeviceGray && name->cmp("Black") == 0) {
+         *gray = clip01(gfxColorComp1 - color->c[0]);
++IJON_SET(1); /* PATCHID:19765 */
+     } else {
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(alt->getMode() == csDeviceGray, name->cmp("Black") == 0));
+ #endif
+ #endif
++IJON_SET(2); /* PATCHID:19328 */
+         x = colToDbl(color->c[0]);
+         func->transform(&x, c);
+         for (i = 0; i < alt->getNComps(); ++i) {
+@@ -2706,8 +2708,12 @@ void GfxSeparationColorSpace::getRGB(const GfxColor *color, GfxRGB *rgb) const
+         x = colToDbl(color->c[0]);
+         func->transform(&x, c);
+         const int altNComps = alt->getNComps();
++IJON_MAX((unsigned long long)altNComps); /* PATCHID:18310 */
++IJON_SET((int)altNComps); /* PATCHID:17618 */
+         for (i = 0; i < altNComps; ++i) {
+             color2.c[i] = dblToCol(c[i]);
++IJON_MAX((unsigned long long)i); /* PATCHID:16980 */
++IJON_SET((int)i); /* PATCHID:16818 */
+         }
+         if (unlikely(altNComps > func->getOutputSize())) {
+             for (i = func->getOutputSize(); i < altNComps; ++i) {
+@@ -2757,11 +2763,14 @@ void GfxSeparationColorSpace::getCMYK(const GfxColor *color, GfxCMYK *cmyk) cons
+                                      name->cmp("Yellow") == 0))));
+ #endif
+ #endif
++IJON_CTX(145); /* PATCHID:16636 */
+         x = colToDbl(color->c[0]);
++IJON_SET((int)(x * 1000)); /* PATCHID:16628 */
+         func->transform(&x, c);
+         for (i = 0; i < alt->getNComps(); ++i) {
+             color2.c[i] = dblToCol(c[i]);
+         }
++IJON_SET((int)(c[i] * 1000)); /* PATCHID:15917 */
+         alt->getCMYK(&color2, cmyk);
+ #ifdef MAGMA_ENABLE_FIXES
+     }
+@@ -4685,6 +4694,7 @@ GfxGouraudTriangleShading *GfxGouraudTriangleShading::parse(GfxResources *res, i
+     }
+     flagBits = vertsPerRow = 0; // make gcc happy
+     if (typeA == 4) {
++IJON_CMP((unsigned long long)typeA, 5); /* PATCHID:10284 */
+         obj1 = dict->lookup("BitsPerFlag");
+         if (obj1.isInt()) {
+             flagBits = obj1.getInt();
+@@ -4696,6 +4706,8 @@ GfxGouraudTriangleShading *GfxGouraudTriangleShading::parse(GfxResources *res, i
+         obj1 = dict->lookup("VerticesPerRow");
+         if (obj1.isInt()) {
+             vertsPerRow = obj1.getInt();
++IJON_MIN((unsigned long long)vertsPerRow); /* PATCHID:9759 */
++IJON_SET((int)vertsPerRow); /* PATCHID:8869 */
+         } else {
+             error(errSyntaxWarning, -1, "Missing or invalid VerticesPerRow in shading dictionary");
+             return nullptr;
+@@ -4793,6 +4805,7 @@ GfxGouraudTriangleShading *GfxGouraudTriangleShading::parse(GfxResources *res, i
+             verticesA[nVerticesA].color.c[i] = dblToCol(cMin[i] + cMul[i] * (double)c[i]);
+         }
+         ++nVerticesA;
++IJON_MAX((unsigned long long)nVerticesA); /* PATCHID:7971 */
+         bitBuf->flushBits();
+         if (typeA == 4) {
+             if (state == 0 || state == 1) {
+@@ -4824,9 +4837,13 @@ GfxGouraudTriangleShading *GfxGouraudTriangleShading::parse(GfxResources *res, i
+     }
+     delete bitBuf;
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_CTX((unsigned long long)typeA); /* PATCHID:6994 */
+     if (typeA == 5 && nVerticesA > 0 && vertsPerRow > 0) {
+ #else
+     if (typeA == 5 && nVerticesA > 0) {
++IJON_MIN((unsigned long long)vertsPerRow); /* PATCHID:6558 */
++IJON_MAX((unsigned long long)nVerticesA); /* PATCHID:6143 */
++IJON_CMP((unsigned long long)typeA, 5); /* PATCHID:5927 */
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", vertsPerRow <= 0);
+ #endif
+diff --git a/poppler/JBIG2Stream.cc b/poppler/JBIG2Stream.cc
+index a2cffe99..0dfae698 100644
+--- a/poppler/JBIG2Stream.cc
++++ b/poppler/JBIG2Stream.cc
+@@ -783,6 +783,7 @@ void JBIG2Bitmap::combine(JBIG2Bitmap *bitmap, int x, int y, unsigned int combOp
+     if (y0 >= y1) {
+         return;
+     }
++IJON_DIST((long long)(y + bitmap->h), (long long)h); /* PATCHID:40152 */
+ 
+     if (x >= 0) {
+         x0 = x & ~7;
+@@ -806,7 +807,9 @@ void JBIG2Bitmap::combine(JBIG2Bitmap *bitmap, int x, int y, unsigned int combOp
+     m3 = (0xff >> s1) & m2;
+ 
+     oneByte = x0 == ((x1 - 1) & ~7);
++IJON_CTX((unsigned long long)227); /* PATCHID:39354 */
+ 
++IJON_SET(combOp); /* PATCHID:39154 */
+     for (yy = y0; yy < y1; ++yy) {
+ #ifdef MAGMA_ENABLE_FIXES
+         if (unlikely((y + yy >= h) || (y + yy < 0)))
+@@ -815,6 +818,9 @@ void JBIG2Bitmap::combine(JBIG2Bitmap *bitmap, int x, int y, unsigned int combOp
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", MAGMA_OR(y + yy >= h, y + yy < 0));
+ #endif
++IJON_DIST((long long)(y + yy), (long long)0); /* PATCHID:38521 */
++IJON_DIST((long long)(y + yy), (long long)h); /* PATCHID:37990 */
++IJON_INC(yy); /* PATCHID:37328 */
+ 
+         // one byte per line -- need to mask both left and right side
+         if (oneByte) {
+diff --git a/poppler/JPEG2000Stream.cc b/poppler/JPEG2000Stream.cc
+index 307e5958..9dc21f6f 100644
+--- a/poppler/JPEG2000Stream.cc
++++ b/poppler/JPEG2000Stream.cc
+@@ -250,10 +250,12 @@ void JPXStream::init()
+ #ifdef MAGMA_ENABLE_FIXES
+     if (oLen.isInt() && oLen.getInt() > 0)
+         bufSize = oLen.getInt();
++IJON_MIN((unsigned long long)bufSize); /* PATCHID:62771 */
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", oLen.getInt() < 0);
+ #endif
++IJON_SET((int)bufSize); /* PATCHID:65402 */
+     if (oLen.isInt()) bufSize = oLen.getInt();
+ #endif
+ 
+@@ -269,11 +271,13 @@ void JPXStream::init()
+         priv->smaskInData = smaskInData.getInt();
+ 
+     int length = 0;
++IJON_MAX((unsigned long long)length); /* PATCHID:64467 */
+     unsigned char *buf = str->toUnsignedChars(&length, bufSize);
+     priv->init2(OPJ_CODEC_JP2, buf, length, indexed);
+     gfree(buf);
+ 
+     if (priv->image) {
++IJON_SET((int)priv->image->numcomps); /* PATCHID:64411 */
+         int numComps = priv->image->numcomps;
+         int alpha = 0;
+         if (priv->image->color_space == OPJ_CLRSPC_SRGB && numComps == 4) {
+@@ -289,8 +293,10 @@ void JPXStream::init()
+             numComps = 4;
+             alpha = 1;
+         } else {
++IJON_SET((int)alpha); /* PATCHID:63413 */
+             alpha = 0;
+         }
++IJON_MAX((unsigned long long)priv->npixels); /* PATCHID:63167 */
+         priv->npixels = priv->image->comps[0].w * priv->image->comps[0].h;
+         priv->ncomps = priv->image->numcomps;
+         if (alpha == 1 && priv->smaskInData == 0)
+diff --git a/poppler/Parser.cc b/poppler/Parser.cc
+index 9f30ec06..dbde202f 100644
+--- a/poppler/Parser.cc
++++ b/poppler/Parser.cc
+@@ -92,11 +92,13 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+     }
+ 
+     if (unlikely(recursion >= recursionLimit)) {
++IJON_MAX((unsigned long long)recursion); /* PATCHID:83175 */
+         return Object(objError);
+     }
+ 
+     // array
+     if (!simpleOnly && buf1.isCmd("[")) {
++IJON_SET(1); /* PATCHID:82810 */
+         shift();
+         obj = Object(new Array(lexer.getXRef()));
+         while (!buf1.isCmd("]") && !buf1.isEOF() && recursion + 1 < recursionLimit) {
+@@ -114,6 +116,7 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+ 
+         // dictionary or stream
+     } else if (!simpleOnly && buf1.isCmd("<<")) {
++IJON_SET(2); /* PATCHID:82075 */
+         shift(objNum);
+         obj = Object(new Dict(lexer.getXRef()));
+         bool hasContentsEntry = false;
+@@ -136,6 +139,7 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+                 // The "Contents" field of Sig dictionaries is not encrypted, but we can't know the type of the dictionary here yet
+                 // so we don't decrypt any Contents and if later we find it's not a Sig dictionary we decrypt it
+                 const bool isContents = !hasContentsEntry && key.isName("Contents");
++IJON_SET((int)hasContentsEntry); /* PATCHID:81369 */
+                 hasContentsEntry = hasContentsEntry || isContents;
+                 Object obj2 = getObj(false, fileKey, encAlgorithm, keyLength, objNum, objGen, recursion + 1, /*strict*/ false, /*decryptString*/ !isContents);
+                 if (unlikely(obj2.isError() && recursion + 1 >= recursionLimit)) {
+@@ -152,6 +156,7 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+         if (fileKey && hasContentsEntry) {
+             Dict *dict = obj.getDict();
+             const bool isSigDict = dict->is("Sig");
++IJON_SET((int)isSigDict); /* PATCHID:80639 */
+             if (!isSigDict) {
+                 const Object &contentsObj = dict->lookupNF("Contents");
+                 if (contentsObj.isString()) {
+@@ -174,15 +179,21 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+ 
+         // indirect reference or integer
+     } else if (buf1.isInt()) {
++IJON_SET(3); /* PATCHID:80202 */
+         const int num = buf1.getInt();
++IJON_MIN((unsigned long long)num); /* PATCHID:79666 */
++IJON_CMP((unsigned long long)num, 0); /* PATCHID:78951 */
+         shift();
+         if (buf1.isInt() && buf2.isCmd("R")) {
+             const int gen = buf1.getInt();
++IJON_MIN((unsigned long long)gen); /* PATCHID:78230 */
++IJON_CMP((unsigned long long)gen, 0); /* PATCHID:77458 */
+             shift();
+             shift();
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+             if (unlikely(num <= 0 || gen < 0)) {
++IJON_SET(4); /* PATCHID:76817 */
+                 return Object();
+             }
+ #endif
+@@ -199,12 +210,14 @@ Object Parser::getObj(bool simpleOnly, const unsigned char *fileKey, CryptAlgori
+ 
+         // string
+     } else if (decryptString && buf1.isString() && fileKey) {
++IJON_SET(5); /* PATCHID:76141 */
+         std::unique_ptr<GooString> s2 = decryptedString(buf1.getString(), fileKey, encAlgorithm, keyLength, objNum, objGen);
+         obj = Object(s2.release());
+         shift();
+ 
+         // simple object
+     } else {
++IJON_SET(6); /* PATCHID:75783 */
+         // avoid re-allocating memory for complex objects like strings by
+         // shallow copy of <buf1> to <obj> and nulling <buf1> so that
+         // subsequent buf1.free() won't free this memory
+@@ -248,8 +261,12 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+     Object obj = dict.dictLookup("Length", recursion);
+     if (obj.isInt()) {
+         length = obj.getInt();
++IJON_MAX((unsigned long long)length); /* PATCHID:72356 */
++IJON_MAX((unsigned long long)length); /* PATCHID:69724 */
+     } else if (obj.isInt64()) {
++IJON_MAX((unsigned long long)length); /* PATCHID:72354 */
+         length = obj.getInt64();
++IJON_MAX((unsigned long long)length); /* PATCHID:69316 */
+     } else {
+         error(errSyntaxError, getPos(), "Bad 'Length' attribute in stream");
+         if (strict)
+@@ -260,6 +277,8 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+     // check for length in damaged file
+     if (lexer.hasXRef() && lexer.getXRef()->getStreamEnd(pos, &endPos)) {
+         length = endPos - pos;
++IJON_MAX((unsigned long long)pos); /* PATCHID:68868 */
++IJON_MAX((unsigned long long)length); /* PATCHID:68429 */
+     }
+ 
+     // in badly damaged PDF files, we can run off the end of the input
+@@ -276,11 +295,16 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+         lexer.lookCharLastValueCached = Lexer::LOOK_VALUE_NOT_CACHED;
+     }
+     if (unlikely(length < 0)) {
++IJON_CMP((unsigned long long)length, (unsigned long long)LLONG_MAX); /* PATCHID:67561 */
++IJON_CMP((unsigned long long)pos, (unsigned long long)LLONG_MAX); /* PATCHID:71941 */
+         return nullptr;
+     }
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     if (unlikely(pos > LLONG_MAX - length)) {
++IJON_MAX((unsigned long long)pos); /* PATCHID:71423 */
++IJON_CMP((unsigned long long)pos, (unsigned long long)(LLONG_MAX - length)); /* PATCHID:66989 */
++IJON_DIST((long long)pos, (long long)(LLONG_MAX - length)); /* PATCHID:66340 */
+         return nullptr;
+     }
+ #endif
+@@ -294,6 +318,7 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+     shift("endstream", objNum); // kill 'stream'
+     if (buf1.isCmd("endstream")) {
+         shift();
++IJON_MAX((unsigned long long)length); /* PATCHID:71212 */
+     } else {
+         error(errSyntaxError, getPos(), "Missing 'endstream' or incorrect stream length");
+         if (strict)
+@@ -303,6 +328,8 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+             length = lexer.getPos() - pos;
+             if (buf1.isCmd("endstream")) {
+                 dict.dictSet("Length", Object(length));
++
++IJON_MAX((unsigned long long)length); /* PATCHID:70297 */
+             }
+         } else {
+             // When building the xref we can't use it so use this
+@@ -314,6 +341,7 @@ Stream *Parser::makeStream(Object &&dict, const unsigned char *fileKey, CryptAlg
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+             MAGMA_LOG("%MAGMA_BUG%", length >= LLONG_MAX - pos - 5000);
++IJON_CMP((unsigned long long)length, (unsigned long long)(LLONG_MAX - pos - 5000)); /* PATCHID:66268 */
+ #endif
+             length += 5000;
+ #endif
+diff --git a/poppler/SplashOutputDev.cc b/poppler/SplashOutputDev.cc
+index f2313201..eb03ea64 100644
+--- a/poppler/SplashOutputDev.cc
++++ b/poppler/SplashOutputDev.cc
+@@ -2452,9 +2452,11 @@ void SplashOutputDev::type3D1(GfxState *state, double wx, double wy, double llx,
+     double xt, yt, xMin, xMax, yMin, yMax, x1, y1;
+     int i, j;
+ 
++IJON_CTX(76); /* PATCHID:22491 */
+     // ignore multiple d0/d1 operators
+ #ifdef MAGMA_ENABLE_FIXES
+     if (!t3GlyphStack || t3GlyphStack->haveDx) {
++IJON_SET((int)(t3GlyphStack == nullptr)); /* PATCHID:21876 */
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", t3GlyphStack == nullptr);
+@@ -2483,6 +2485,7 @@ void SplashOutputDev::type3D1(GfxState *state, double wx, double wy, double llx,
+         error(errSyntaxWarning, -1, "t3GlyphStack origSplash was not null in SplashOutputDev::type3D1");
+         return;
+     }
++IJON_INC((int)t3GlyphStack->haveDx); /* PATCHID:21078 */
+ 
+     t3Font = t3GlyphStack->cache;
+ 
+@@ -2525,6 +2528,7 @@ void SplashOutputDev::type3D1(GfxState *state, double wx, double wy, double llx,
+         yMax = y1;
+     }
+     if (xMin - xt < t3Font->glyphX || yMin - yt < t3Font->glyphY || xMax - xt > t3Font->glyphX + t3Font->glyphW || yMax - yt > t3Font->glyphY + t3Font->glyphH) {
++
+         if (t3Font->validBBox) {
+             error(errSyntaxWarning, -1, "Bad bounding box in Type 3 glyph");
+         }
+@@ -4254,8 +4258,12 @@ bool SplashOutputDev::tilingPatternFill(GfxState *state, Gfx *gfxA, Catalog *cat
+     m1.m[4] = 0;
+     m1.m[5] = 0;
+     m1.transform(width, height, &kx, &ky);
++IJON_DIST((long long)(ky * 1000), 0); /* PATCHID:15259 */
++IJON_DIST((long long)(kx * 1000), 0); /* PATCHID:14910 */
+     surface_width = (int)ceil(fabs(kx));
+     surface_height = (int)ceil(fabs(ky));
++IJON_MIN((unsigned long long)surface_height); /* PATCHID:14632 */
++IJON_MIN((unsigned long long)surface_width); /* PATCHID:14565 */
+ 
+     sx = (double)result_width / (surface_width * (x1 - x0));
+     sy = (double)result_height / (surface_height * (y1 - y0));
+@@ -4284,8 +4292,14 @@ bool SplashOutputDev::tilingPatternFill(GfxState *state, Gfx *gfxA, Catalog *cat
+             m1.m[3] /= 2;
+             m1.transform(width, height, &kx, &ky);
+         }
++IJON_DIST((long long)(ky * 1000), 0); /* PATCHID:13783 */
++IJON_DIST((long long)(kx * 1000), 0); /* PATCHID:13022 */
+         surface_width = (int)ceil(fabs(kx));
+         surface_height = (int)ceil(fabs(ky));
++IJON_SET(surface_height); /* PATCHID:12901 */
++IJON_SET(surface_width); /* PATCHID:12176 */
++IJON_MIN((unsigned long long)surface_height); /* PATCHID:11208 */
++IJON_MIN((unsigned long long)surface_width); /* PATCHID:10736 */
+         // adjust repeat values to completely fill region
+ #ifdef MAGMA_ENABLE_FIXES
+         if (unlikely(surface_width == 0 || surface_height == 0)) {
+@@ -4296,6 +4310,7 @@ bool SplashOutputDev::tilingPatternFill(GfxState *state, Gfx *gfxA, Catalog *cat
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", MAGMA_OR(surface_width == 0, surface_height == 0));
+ #endif
++
+         repeatX = result_width / surface_width;
+         repeatY = result_height / surface_height;
+         if (surface_width * repeatX < result_width)
+diff --git a/poppler/Stream.cc b/poppler/Stream.cc
+index de2dacb9..63769103 100644
+--- a/poppler/Stream.cc
++++ b/poppler/Stream.cc
+@@ -580,16 +580,33 @@ ImageStream::ImageStream(Stream *strA, int widthA, int nCompsA, int nBitsA)
+     width = widthA;
+     nComps = nCompsA;
+     nBits = nBitsA;
++IJON_MAX((unsigned long long)widthA); /* PATCHID:56079 */
++IJON_CMP((unsigned long long)nCompsA, 0); /* PATCHID:55148 */
++IJON_MIN((unsigned long long)nCompsA); /* PATCHID:54506 */
++IJON_CMP((unsigned long long)nBitsA, 0); /* PATCHID:53756 */
++IJON_MAX((unsigned long long)width); /* PATCHID:51053 */
++IJON_MIN((unsigned long long)nComps); /* PATCHID:50761 */
++IJON_SET((int)nVals); /* PATCHID:53269 */
++IJON_MIN((unsigned long long)nBits); /* PATCHID:50541 */
++IJON_SET((int)inputLineSize); /* PATCHID:52460 */
+ 
+     nVals = width * nComps;
++IJON_CMP((unsigned long long)width, (unsigned long long)INT_MAX); /* PATCHID:52284 */
++IJON_DIST((long long)nComps, (long long)0); /* PATCHID:50283 */
++IJON_MAX((unsigned long long)nVals); /* PATCHID:49297 */
+     inputLineSize = (nVals * nBits + 7) >> 3;
++IJON_CMP((unsigned long long)nVals, (unsigned long long)INT_MAX); /* PATCHID:48476 */
++IJON_MAX((unsigned long long)inputLineSize); /* PATCHID:48278 */
++IJON_CMP((unsigned long long)nVals, (unsigned long long)INT_MAX); /* PATCHID:51812 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (nComps <= 0 || nBits <= 0 || nVals > INT_MAX / nBits - 7 || width > INT_MAX / nComps) {
++
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", nComps <= 0);
+ #endif
+     if (nBits <= 0 || nVals > INT_MAX / nBits - 7 || width > INT_MAX / nComps) {
++IJON_DIST((long long)inputLineSize, (long long)-1); /* PATCHID:47497 */
+ #endif
+         inputLineSize = -1;
+     }
+@@ -599,8 +616,10 @@ ImageStream::ImageStream(Stream *strA, int widthA, int nCompsA, int nBitsA)
+     } else {
+         if (nBits == 1) {
+             imgLineSize = (nVals + 7) & ~7;
++IJON_SET((int)imgLineSize); /* PATCHID:46743 */
+         } else {
+             imgLineSize = nVals;
++IJON_SET((int)imgLineSize); /* PATCHID:46447 */
+         }
+ #ifdef MAGMA_ENABLE_FIXES
+         if (nComps <= 0 || width > INT_MAX / nComps) {
+@@ -611,10 +630,12 @@ ImageStream::ImageStream(Stream *strA, int widthA, int nCompsA, int nBitsA)
+         if (width > INT_MAX / nComps) {
+ #endif
+             imgLineSize = -1;
++IJON_DIST((long long)imgLineSize, (long long)-1); /* PATCHID:45534 */
+         }
+         imgLine = (unsigned char *)gmallocn_checkoverflow(imgLineSize, sizeof(unsigned char));
+     }
+     imgIdx = nVals;
++IJON_SET((int)imgIdx); /* PATCHID:44607 */
+ }
+ 
+ ImageStream::~ImageStream()
+@@ -658,6 +679,8 @@ unsigned char *ImageStream::getLine()
+     }
+ 
+     int readChars = str->doGetChars(inputLineSize, inputLine);
++IJON_MIN((unsigned long long)(readChars >= 0 ? 0 : -readChars)); /* PATCHID:43949 */
++IJON_SET((int)readChars); /* PATCHID:43697 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (unlikely(readChars == -1)) {
+         readChars = 0;
+@@ -669,8 +692,10 @@ unsigned char *ImageStream::getLine()
+     for (; readChars < inputLineSize; readChars++)
+         inputLine[readChars] = EOF;
+     if (nBits == 1) {
++IJON_SET((int)nBits); /* PATCHID:42720 */
+         unsigned char *p = inputLine;
+         for (int i = 0; i < nVals; i += 8) {
++IJON_MAX((unsigned long long)i); /* PATCHID:42253 */
+             const int c = *p++;
+             imgLine[i + 0] = (unsigned char)((c >> 7) & 1);
+             imgLine[i + 1] = (unsigned char)((c >> 6) & 1);
+@@ -690,6 +715,7 @@ unsigned char *ImageStream::getLine()
+         // The hack has another part on GfxImageColorMap::GfxImageColorMap
+         unsigned char *p = inputLine;
+         for (int i = 0; i < nVals; ++i) {
++IJON_MAX((unsigned long long)i); /* PATCHID:41401 */
+             imgLine[i] = *p++;
+             p++;
+         }
+@@ -699,6 +725,7 @@ unsigned char *ImageStream::getLine()
+         int bits = 0;
+         unsigned char *p = inputLine;
+         for (int i = 0; i < nVals; ++i) {
++IJON_MAX((unsigned long long)i); /* PATCHID:41065 */
+             while (bits < nBits) {
+                 buf = (buf << 8) | (*p++ & 0xff);
+                 bits += 8;
+diff --git a/poppler/XRef.cc b/poppler/XRef.cc
+index 38487cc9..db2c6e9d 100644
+--- a/poppler/XRef.cc
++++ b/poppler/XRef.cc
+@@ -1669,6 +1669,7 @@ DummyXRefEntry dummyXRefEntry;
+ XRefEntry *XRef::getEntry(int i, bool complainIfMissing)
+ {
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_MIN((unsigned long long)i); /* PATCHID:24909 */
+     if (unlikely(i < 0)) {
+         error(errInternal, -1, "Request for invalid XRef entry [{0:d}]", i);
+         return &dummyXRefEntry;
+@@ -1677,10 +1678,12 @@ XRefEntry *XRef::getEntry(int i, bool complainIfMissing)
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", i < 0);
+ #endif
++IJON_DIST((long long)i, (long long)size); /* PATCHID:24498 */
+     if (i >= size || entries[i].type == xrefEntryNone) {
+ 
+         if ((!xRefStream) && mainXRefEntriesOffset) {
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_DIST((long long)i, (long long)capacity); /* PATCHID:23927 */
+             if (unlikely(i >= capacity)) {
+                 error(errInternal, -1, "Request for out-of-bounds XRef entry [{0:d}]", i);
+                 return &dummyXRefEntry;
+@@ -1704,6 +1707,7 @@ XRefEntry *XRef::getEntry(int i, bool complainIfMissing)
+                 return &dummyXRefEntry;
+             }
+ 
++IJON_SET((int)entries[i].type); /* PATCHID:23129 */
+             if (entries[i].type == xrefEntryNone) {
+                 if (complainIfMissing) {
+                     error(errSyntaxError, -1, "Invalid XRef entry {0:d}", i);
+diff --git a/splash/Splash.cc b/splash/Splash.cc
+index 15ace816..b3def8a3 100644
+--- a/splash/Splash.cc
++++ b/splash/Splash.cc
+@@ -5657,6 +5657,12 @@ SplashError Splash::blitTransparent(SplashBitmap *src, int xSrc, int ySrc, int x
+     SplashColorPtr p, sp;
+     unsigned char *q;
+     int x, y, mask, srcMask, width = w, height = h;
++IJON_MAX((unsigned long long)yDest); /* PATCHID:5319 */
++IJON_MAX((unsigned long long)xDest); /* PATCHID:5316 */
++IJON_MAX((unsigned long long)ySrc); /* PATCHID:4475 */
++IJON_MAX((unsigned long long)xSrc); /* PATCHID:3513 */
++IJON_MAX((unsigned long long)h); /* PATCHID:2519 */
++IJON_MAX((unsigned long long)w); /* PATCHID:2082 */
+ 
+     if (src->mode != bitmap->mode) {
+         return splashErrModeMismatch;
+@@ -5685,6 +5691,7 @@ SplashError Splash::blitTransparent(SplashBitmap *src, int xSrc, int ySrc, int x
+     if (height < 0)
+         height = 0;
+ #else
++IJON_CTX(408); /* PATCHID:1147 */
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", MAGMA_OR(src->getWidth() - xSrc < width, \
+                         MAGMA_OR(src->getHeight() - ySrc < height, \
+diff --git a/splash/SplashXPathScanner.cc b/splash/SplashXPathScanner.cc
+index 6e5dd540..ff4e864e 100644
+--- a/splash/SplashXPathScanner.cc
++++ b/splash/SplashXPathScanner.cc
+@@ -446,6 +446,9 @@ void SplashXPathScanner::clipAALine(SplashBitmap *aaBuf, int *x0, int *x1, int y
+         xx = *x0 * splashAASize;
+         if (yy >= yyMin && yy <= yyMax) {
+             const int intersectionIndex = splashAASize * y + yy - yMin;
++IJON_DIST((long long)intersectionIndex, 0LL); /* PATCHID:58027 */
++IJON_CMP((unsigned long long)intersectionIndex, 0ULL); /* PATCHID:57812 */
++IJON_SET((int)intersectionIndex); /* PATCHID:56827 */
+ #ifdef MAGMA_ENABLE_FIXES
+             if (unlikely(intersectionIndex < 0 || (unsigned)intersectionIndex >= allIntersections.size()))
+                 break;
+diff --git a/utils/HtmlOutputDev.cc b/utils/HtmlOutputDev.cc
+index d1d6327f..0dc0b1a6 100644
+--- a/utils/HtmlOutputDev.cc
++++ b/utils/HtmlOutputDev.cc
+@@ -1320,6 +1320,7 @@ void HtmlOutputDev::drawPngImage(GfxState *state, Stream *str, int width, int he
+     InMemoryFile ims;
+ 
+     if (!colorMap && !isMask) {
++IJON_SET((int)isMask); /* PATCHID:27244 */
+         error(errInternal, -1, "Can't have color image without a color map");
+         return;
+     }
+@@ -1343,6 +1344,7 @@ void HtmlOutputDev::drawPngImage(GfxState *state, Stream *str, int width, int he
+     }
+ 
+     if (!isMask) {
++IJON_CTX(380); /* PATCHID:26764 */
+         unsigned char *p;
+         GfxRGB rgb;
+         png_byte *row = (png_byte *)gmalloc(3 * width); // 3 bytes/pixel: RGB
+@@ -1409,13 +1411,16 @@ void HtmlOutputDev::drawPngImage(GfxState *state, Stream *str, int width, int he
+             if (colToByte(gray) == 0)
+                 invert_bits = 0x00;
+         }
++IJON_SET((int)invert_bits); /* PATCHID:25881 */
+ 
+         str->reset();
+         unsigned char *png_row = (unsigned char *)gmalloc(size);
+ 
+         for (int ri = 0; ri < height; ++ri) {
++IJON_INC((int)ri); /* PATCHID:25457 */
+             for (int i = 0; i < size; i++)
+                 png_row[i] = str->getChar() ^ invert_bits;
++IJON_INC((int)i); /* PATCHID:24928 */
+ 
+             if (!writer->writeRow(&png_row)) {
+                 error(errIO, -1, "Failed to write into PNG '{0:t}'", fName);
+diff --git a/utils/ImageOutputDev.cc b/utils/ImageOutputDev.cc
+index cd0bf80a..c1891e0f 100644
+--- a/utils/ImageOutputDev.cc
++++ b/utils/ImageOutputDev.cc
+@@ -364,6 +364,7 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+     int invert_bits;
+ 
+     if (writer) {
++IJON_SET((int)format); /* PATCHID:62768 */
+         setFilename(ext);
+         ++imgNum;
+         if (!(f = fopen(fileName, "wb"))) {
+@@ -372,7 +373,9 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+         }
+ 
+         if (!writer->init(f, width, height, 72, 72)) {
++IJON_MAX((unsigned long long)width); /* PATCHID:61987 */
+             error(errIO, -1, "Error writing '{0:s}'", fileName);
++IJON_MAX((unsigned long long)height); /* PATCHID:61280 */
+             return;
+         }
+     }
+@@ -382,6 +385,7 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+         pixelSize = 2 * sizeof(unsigned int);
+ 
+     row = (unsigned char *)gmallocn_checkoverflow(width, pixelSize);
++IJON_MAX((unsigned long long)pixelSize); /* PATCHID:61226 */
+     if (!row) {
+         error(errIO, -1, "Image data for '{0:s}' is too big. {1:d} width with {2:d} bytes per pixel", fileName, width, pixelSize);
+         return;
+@@ -403,6 +407,7 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+     invert_bits = 0xff;
+     if (colorMap) {
+         memset(zero, 0, sizeof(zero));
++IJON_MIN((unsigned long long)sizeof(zero)); /* PATCHID:60485 */
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(colorMap->getColorSpace2() == nullptr, (size_t)colorMap->getNumPixelComps() > sizeof(zero)));
+ #endif
+@@ -414,10 +419,12 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+     // for each line...
+     for (int y = 0; y < height; y++) {
+         switch (format) {
++IJON_CTX(474); /* PATCHID:60136 */
+         case imgRGB:
+             p = imgStr->getLine();
+             rowp = row;
+             for (int x = 0; x < width; ++x) {
++IJON_INC(x); /* PATCHID:59238 */
+                 if (p) {
+                     colorMap->getRGB(p, &rgb);
+                     *rowp++ = colToByte(rgb.r);
+@@ -438,6 +445,7 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+             p = imgStr->getLine();
+             unsigned short *rowp16 = reinterpret_cast<unsigned short *>(row);
+             for (int x = 0; x < width; ++x) {
++IJON_INC(x); /* PATCHID:59075 */
+                 if (p) {
+                     colorMap->getRGB(p, &rgb);
+                     *rowp16++ = colToShort(rgb.r);
+@@ -459,6 +467,7 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+             p = imgStr->getLine();
+             rowp = row;
+             for (int x = 0; x < width; ++x) {
++IJON_INC(x); /* PATCHID:58998 */
+                 if (p) {
+                     colorMap->getCMYK(p, &cmyk);
+                     *rowp++ = colToByte(cmyk.c);
+@@ -481,6 +490,7 @@ void ImageOutputDev::writeImageFile(ImgWriter *writer, ImageFormat format, const
+             p = imgStr->getLine();
+             rowp = row;
+             for (int x = 0; x < width; ++x) {
++IJON_INC(x); /* PATCHID:58147 */
+                 if (p) {
+                     colorMap->getGray(p, &gray);
+                     *rowp++ = colToByte(gray);

@@ -1,0 +1,462 @@
+diff --git a/ext/fts5/fts5_hash.c b/ext/fts5/fts5_hash.c
+index 0f4651a..1471dff 100644
+--- a/ext/fts5/fts5_hash.c
++++ b/ext/fts5/fts5_hash.c
+@@ -456,9 +456,16 @@ static int fts5HashEntrySort(
+   for(iSlot=0; iSlot<pHash->nSlot; iSlot++){
+     Fts5HashEntry *pIter;
+     for(pIter=pHash->aSlot[iSlot]; pIter; pIter=pIter->pHashNext){
++#ifdef MAGMA_ENABLE_FIXES
+       if( pTerm==0 
+        || (pIter->nKey+1>=nTerm && 0==memcmp(fts5EntryKey(pIter), pTerm, nTerm))
+       ){
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++      MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(pTerm != 0, pIter->nKey+1 < nTerm));
++#endif
++      if(pTerm==0 || 0==memcmp(fts5EntryKey(pIter), pTerm, nTerm)) {
++#endif
+         Fts5HashEntry *pEntry = pIter;
+         pEntry->pScanNext = 0;
+         for(i=0; ap[i]; i++){
+diff --git a/ext/misc/zipfile.c b/ext/misc/zipfile.c
+index b727f9f..3f4320b 100644
+--- a/ext/misc/zipfile.c
++++ b/ext/misc/zipfile.c
+@@ -1630,7 +1630,13 @@ static int zipfileUpdate(
+ 
+     if( rc==SQLITE_OK ){
+       zPath = (const char*)sqlite3_value_text(apVal[2]);
++#ifdef MAGMA_ENABLE_FIXES
+       if( zPath==0 ) zPath = "";
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++      MAGMA_LOG("%MAGMA_BUG%", zPath == 0);
++#endif
++#endif
+       nPath = (int)strlen(zPath);
+       mTime = zipfileGetTime(apVal[4]);
+     }
+@@ -1647,7 +1653,14 @@ static int zipfileUpdate(
+           rc = SQLITE_NOMEM;
+           nPath = 0;
+         }else{
++#ifdef MAGMA_ENABLE_FIXES
+           nPath = (int)strlen(zPath);
++#else
++          nPath++;
++#ifdef MAGMA_ENABLE_CANARIES
++          MAGMA_LOG("%MAGMA_BUG%", (int)strlen(zPath) != nPath);
++#endif
++#endif
+         }
+       }
+     }
+@@ -2053,7 +2066,14 @@ void zipfileStep(sqlite3_context *pCtx, int nVal, sqlite3_value **apVal){
+         rc = SQLITE_NOMEM;
+         goto zipfile_step_out;
+       }
++#ifdef MAGMA_ENABLE_FIXES
+       nName = (int)strlen(zName);
++#else
++      nName++;
++#ifdef MAGMA_ENABLE_CANARIES
++      MAGMA_LOG("%MAGMA_BUG%", (int)strlen(zName) != nName);
++#endif
++#endif
+     }else{
+       while( nName>1 && zName[nName-2]=='/' ) nName--;
+     }
+diff --git a/ext/rtree/rtree.c b/ext/rtree/rtree.c
+index 2151d5a..a2828df 100644
+--- a/ext/rtree/rtree.c
++++ b/ext/rtree/rtree.c
+@@ -3669,12 +3669,17 @@ static int getNodeSize(
+     rc = getIntFromStmt(db, zSql, &pRtree->iNodeSize);
+     if( rc!=SQLITE_OK ){
+       *pzErr = sqlite3_mprintf("%s", sqlite3_errmsg(db));
++#ifdef MAGMA_ENABLE_FIXES
+     }else if( pRtree->iNodeSize<(512-64) ){
+       rc = SQLITE_CORRUPT_VTAB;
+       RTREE_IS_CORRUPT(pRtree);
+       *pzErr = sqlite3_mprintf("undersize RTree blobs in \"%q_node\"",
+                                pRtree->zName);
++#endif
+     }
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", pRtree->iNodeSize<(512-64));
++#endif
+   }
+ 
+   sqlite3_free(zSql);
+diff --git a/src/build.c b/src/build.c
+index 5bf5680..78e3100 100644
+--- a/src/build.c
++++ b/src/build.c
+@@ -2445,10 +2445,15 @@ void sqlite3EndTable(
+   ** table itself.  So mark it read-only.
+   */
+   if( db->init.busy ){
++#ifdef MAGMA_ENABLE_FIXES
+     if( pSelect ){
+       sqlite3ErrorMsg(pParse, "");
+       return;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", pSelect != 0);
++#endif
+     p->tnum = db->init.newTnum;
+     if( p->tnum==1 ) p->tabFlags |= TF_Readonly;
+   }
+diff --git a/src/expr.c b/src/expr.c
+index 4ad1902..4f2fd31 100644
+--- a/src/expr.c
++++ b/src/expr.c
+@@ -98,7 +98,14 @@ Expr *sqlite3ExprAddCollateToken(
+   int dequote              /* True to dequote pCollName */
+ ){
+   if( pCollName->n>0 ){
++#ifdef MAGMA_ENABLE_FIXES
+     Expr *pNew = sqlite3ExprAlloc(pParse->db, TK_COLLATE, pCollName, dequote);
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", dequote==0);
++#endif
++    Expr *pNew = sqlite3ExprAlloc(pParse->db, TK_COLLATE, pCollName, 1);
++#endif
+     if( pNew ){
+       pNew->pLeft = pExpr;
+       pNew->flags |= EP_Collate|EP_Skip;
+@@ -5681,11 +5688,24 @@ static int impliesNotNullRow(Walker *pWalker, Expr *pExpr){
+       testcase( pExpr->op==TK_GE );
+       /* The y.pTab=0 assignment in wherecode.c always happens after the
+       ** impliesNotNullRow() test */
++#ifdef MAGMA_ENABLE_FIXES
+       if( (pLeft->op==TK_COLUMN && ALWAYS(pLeft->y.pTab!=0)
+                                && IsVirtual(pLeft->y.pTab))
+        || (pRight->op==TK_COLUMN && ALWAYS(pRight->y.pTab!=0)
+                                && IsVirtual(pRight->y.pTab))
+-      ){
++      )
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++      MAGMA_LOG("%MAGMA_BUG%", MAGMA_OR(
++                            MAGMA_AND(pLeft->op==TK_COLUMN, pLeft->y.pTab == 0),
++                            MAGMA_AND(pLeft->op!=TK_COLUMN,
++                              MAGMA_AND(pRight->op==TK_COLUMN, pRight->y.pTab == 0))));
++#endif
++      if( (pLeft->op==TK_COLUMN && IsVirtual(pLeft->y.pTab))
++       || (pRight->op==TK_COLUMN && IsVirtual(pRight->y.pTab))
++      )
++#endif
++      {
+         return WRC_Prune;
+       }
+       /* no break */ deliberate_fall_through
+diff --git a/src/pragma.c b/src/pragma.c
+index e0cf5ce..5d5a274 100644
+--- a/src/pragma.c
++++ b/src/pragma.c
+@@ -1677,9 +1677,17 @@ void sqlite3Pragma(
+           if( j==pTab->iPKey ) continue;
+           if( pTab->aCol[j].notNull==0 ) continue;
+           sqlite3ExprCodeGetColumnOfTable(v, pTab, iDataCur, j, 3);
++#ifndef MAGMA_ENABLE_FIXES
++#ifdef MAGMA_ENABLE_CANARIES
++          MAGMA_LOG("%MAGMA_BUG%", sqlite3VdbeGetOp(v,-1)->opcode!=OP_Column);
++#endif
++#else
+           if( sqlite3VdbeGetOp(v,-1)->opcode==OP_Column ){
++#endif
+             sqlite3VdbeChangeP5(v, OPFLAG_TYPEOFARG);
++#ifdef MAGMA_ENABLE_FIXES
+           }
++#endif
+           jmp2 = sqlite3VdbeAddOp1(v, OP_NotNull, 3); VdbeCoverage(v);
+           zErr = sqlite3MPrintf(db, "NULL value in %s.%s", pTab->zName,
+                               pTab->aCol[j].zName);
+diff --git a/src/printf.c b/src/printf.c
+index f663e1b..cd6d2c8 100644
+--- a/src/printf.c
++++ b/src/printf.c
+@@ -541,8 +541,12 @@ void sqlite3_str_vappendf(
+           prefix = flag_prefix;
+         }
+         if( xtype==etGENERIC && precision>0 ) precision--;
++#ifdef MAGMA_ENABLE_FIXES
+         testcase( precision>0xfff );
+         idx = precision & 0xfff;
++#else
++        idx = precision;
++#endif
+         rounder = arRound[idx%10];
+         while( idx>=10 ){ rounder *= 1.0e-10; idx -= 10; }
+         if( xtype==etFLOAT ){
+@@ -604,7 +608,14 @@ void sqlite3_str_vappendf(
+         }
+         {
+           i64 szBufNeeded;           /* Size of a temporary buffer needed */
++#ifdef MAGMA_ENABLE_FIXES
++          szBufNeeded = MAX(e2,0)+(i64)precision+(i64)width+15;
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++          MAGMA_LOG("%MAGMA_BUG%", MAX(e2,0) + precision > (((int)-1)&0x7fffffff) - 15 - width);
++#endif
+           szBufNeeded = MAX(e2,0)+(i64)precision+(i64)width+15;
++#endif
+           if( szBufNeeded > etBUFSIZE ){
+             bufpt = zExtra = printfTempBuf(pAccum, szBufNeeded);
+             if( bufpt==0 ) return;
+diff --git a/src/resolve.c b/src/resolve.c
+index 3bf84d3..49b609c 100644
+--- a/src/resolve.c
++++ b/src/resolve.c
+@@ -188,22 +188,37 @@ static int areDoubleQuotedStringsEnabled(sqlite3 *db, NameContext *pTopNC){
+ Bitmask sqlite3ExprColUsed(Expr *pExpr){
+   int n;
+   Table *pExTab;
++  Bitmask result;
+ 
+   n = pExpr->iColumn;
+   pExTab = pExpr->y.pTab;
+   assert( pExTab!=0 );
++#ifdef MAGMA_ENABLE_FIXES
+   if( (pExTab->tabFlags & TF_HasGenerated)!=0
+    && (pExTab->aCol[n].colFlags & COLFLAG_GENERATED)!=0 
+   ){
+     testcase( pExTab->nCol==BMS-1 );
+     testcase( pExTab->nCol==BMS );
+-    return pExTab->nCol>=BMS ? ALLBITS : MASKBIT(pExTab->nCol)-1;
++    result = pExTab->nCol>=BMS ? ALLBITS : MASKBIT(pExTab->nCol)-1;
+   }else{
++#endif
+     testcase( n==BMS-1 );
+     testcase( n==BMS );
+     if( n>=BMS ) n = BMS-1;
+-    return ((Bitmask)1)<<n;
++    result = ((Bitmask)1)<<n;
++#ifdef MAGMA_ENABLE_FIXES
+   }
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%",
++    MAGMA_AND((pExTab->tabFlags & TF_HasGenerated)!=0,
++    MAGMA_AND((pExTab->aCol[n].colFlags & COLFLAG_GENERATED)!=0,
++    MAGMA_AND(pExTab->nCol >= BMS,
++              result < ALLBITS)))
++  );
++#endif
++#endif
++  return result;
+ }
+ 
+ /*
+diff --git a/src/select.c b/src/select.c
+index d368392..60ae57e 100644
+--- a/src/select.c
++++ b/src/select.c
+@@ -2959,8 +2959,12 @@ static int multiSelect(
+     }
+   #endif
+   }
++#ifdef MAGMA_ENABLE_FIXES
+   if( pParse->nErr ) goto multi_select_end;
+-  
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%", pParse->nErr != 0);
++#endif
+   /* Compute collating sequences used by 
+   ** temporary tables needed to implement the compound select.
+   ** Attach the KeyInfo structure to all temporary tables.
+@@ -4081,10 +4085,15 @@ static int flattenSubquery(
+     if( pSubSrc->nSrc>1                   /* (3a) */
+      || isAgg                             /* (3b) */
+      || IsVirtual(pSubSrc->a[0].pTab)     /* (3c) */
++#ifdef MAGMA_ENABLE_FIXES
+      || (p->selFlags & SF_Distinct)!=0    /* (3d) */
++#endif
+     ){
+       return 0;
+     }
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", (p->selFlags & SF_Distinct)!=0);
++#endif
+   }
+ #ifdef SQLITE_EXTRA_IFNULLROW
+   else if( iFrom>0 && !isAgg ){
+@@ -5506,9 +5515,16 @@ static int selectExpander(Walker *pWalker, Select *p){
+ 
+   /* Process NATURAL keywords, and ON and USING clauses of joins.
+   */
+-  if( pParse->nErr || db->mallocFailed || sqliteProcessJoin(pParse, p) ){
+-    return WRC_Abort;
++  if(
++#ifdef MAGMA_ENABLE_FIXES
++     pParse->nErr ||
++#endif
++     db->mallocFailed || sqliteProcessJoin(pParse, p) ){
++      return WRC_Abort;
+   }
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%", pParse->nErr);
++#endif
+ 
+   /* For every "*" that occurs in the column list, insert the names of
+   ** all columns in all tables.  And for every TABLE.* insert the names
+@@ -6672,10 +6688,17 @@ int sqlite3Select(
+   */
+   if( (p->selFlags & (SF_Distinct|SF_Aggregate))==SF_Distinct 
+    && sqlite3ExprListCompare(sSort.pOrderBy, pEList, -1)==0
++#ifdef MAGMA_ENABLE_FIXES
+ #ifndef SQLITE_OMIT_WINDOWFUNC
+    && p->pWin==0
++#endif
+ #endif
+   ){
++#ifdef MAGMA_ENABLE_CANARIES
++#ifndef SQLITE_OMIT_WINDOWFUNC
++    MAGMA_LOG("%MAGMA_BUG%", p->pWin != 0);
++#endif
++#endif
+     p->selFlags &= ~SF_Distinct;
+     pGroupBy = p->pGroupBy = sqlite3ExprListDup(db, pEList, 0);
+     p->selFlags |= SF_Aggregate;
+diff --git a/src/shell.c.in b/src/shell.c.in
+index f90822e..d778fa9 100644
+--- a/src/shell.c.in
++++ b/src/shell.c.in
+@@ -3624,7 +3624,12 @@ static char **tableColumnList(ShellState *p, const char *zTab){
+     }
+   }
+   sqlite3_finalize(pStmt);
++#ifdef MAGMA_ENABLE_FIXES
+   if( azCol==0 ) return 0;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%", azCol==0);
++#endif
+   azCol[0] = 0;
+   azCol[nCol+1] = 0;
+ 
+diff --git a/src/sqliteInt.h b/src/sqliteInt.h
+index 4d92703..b0eb23c 100644
+--- a/src/sqliteInt.h
++++ b/src/sqliteInt.h
+@@ -2246,9 +2246,20 @@ struct Table {
+ */
+ #ifndef SQLITE_OMIT_VIRTUALTABLE
+ #  define IsVirtual(X)      ((X)->nModuleArg)
++#ifdef MAGMA_ENABLE_FIXES
+ #  define ExprIsVtab(X)  \
+               ((X)->op==TK_COLUMN && (X)->y.pTab!=0 && (X)->y.pTab->nModuleArg)
+ #else
++#ifdef MAGMA_ENABLE_CANARIES
++#  define ExprIsVtab(X)  \
++              (MAGMA_LOG_V("%MAGMA_BUG%", MAGMA_AND((X)->op==TK_COLUMN, (X)->y.pTab == 0)), \
++                (X)->op==TK_COLUMN && (X)->y.pTab->nModuleArg)
++#else
++#  define ExprIsVtab(X)  \
++                ((X)->op==TK_COLUMN && (X)->y.pTab==0)
++#endif
++#endif
++#else
+ #  define IsVirtual(X)      0
+ #  define ExprIsVtab(X)     0
+ #endif
+diff --git a/src/vdbe.c b/src/vdbe.c
+index 5b42976..16ecbc8 100644
+--- a/src/vdbe.c
++++ b/src/vdbe.c
+@@ -2154,9 +2154,19 @@ case OP_Ge: {             /* same as TK_GE, jump, in1, in3 */
+   iCompare = res;
+ 
+   /* Undo any changes made by applyAffinity() to the input registers. */
++#ifdef MAGMA_ENABLE_FIXES
+   assert( (pIn3->flags & MEM_Dyn) == (flags3 & MEM_Dyn) );
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%", (pIn3->flags & MEM_Dyn) != (flags3 & MEM_Dyn));
++#endif
+   pIn3->flags = flags3;
++#ifdef MAGMA_ENABLE_FIXES
+   assert( (pIn1->flags & MEM_Dyn) == (flags1 & MEM_Dyn) );
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%", (pIn1->flags & MEM_Dyn) != (flags1 & MEM_Dyn));
++#endif
+   pIn1->flags = flags1;
+ 
+   VdbeBranchTaken(res2!=0, (pOp->p5 & SQLITE_NULLEQ)?2:3);
+diff --git a/src/vdbemem.c b/src/vdbemem.c
+index dc17716..969946d 100644
+--- a/src/vdbemem.c
++++ b/src/vdbemem.c
+@@ -1239,7 +1239,12 @@ static SQLITE_NOINLINE const void *valueToText(sqlite3_value* pVal, u8 enc){
+   assert( !sqlite3VdbeMemIsRowSet(pVal) );
+   assert( (pVal->flags & (MEM_Null))==0 );
+   if( pVal->flags & (MEM_Blob|MEM_Str) ){
++#ifdef MAGMA_ENABLE_FIXES
+     if( ExpandBlob(pVal) ) return 0;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", ExpandBlob(pVal));
++#endif
+     pVal->flags |= MEM_Str;
+     if( pVal->enc != (enc & ~SQLITE_UTF16_ALIGNED) ){
+       sqlite3VdbeChangeEncoding(pVal, enc & ~SQLITE_UTF16_ALIGNED);
+diff --git a/src/where.c b/src/where.c
+index 467963f..18f3b6d 100644
+--- a/src/where.c
++++ b/src/where.c
+@@ -2838,8 +2838,13 @@ static int whereLoopAddBtreeIndex(
+    && pProbe->hasStat1!=0
+    && OptimizationEnabled(db, SQLITE_SkipScan)
+    && pProbe->aiRowLogEst[saved_nEq+1]>=42  /* TUNING: Minimum for skip-scan */
++#ifdef MAGMA_ENABLE_FIXES
+    && (rc = whereLoopResize(db, pNew, pNew->nLTerm+1))==SQLITE_OK
++#endif
+   ){
++#ifdef MAGMA_ENABLE_CANARIES
++      MAGMA_LOG("%MAGMA_BUG%", pNew->nLSlot < (pNew->nLTerm+1));
++#endif
+     LogEst nIter;
+     pNew->u.btree.nEq++;
+     pNew->nSkip++;
+diff --git a/src/whereexpr.c b/src/whereexpr.c
+index b9aa702..cb5fb0c 100644
+--- a/src/whereexpr.c
++++ b/src/whereexpr.c
+@@ -1431,8 +1431,14 @@ static void exprAnalyze(
+   /* Prevent ON clause terms of a LEFT JOIN from being used to drive
+   ** an index for tables to the left of the join.
+   */
++#ifdef MAGMA_ENABLE_FIXES
+   testcase( pTerm!=&pWC->a[idxTerm] );
+   pTerm = &pWC->a[idxTerm];
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++  MAGMA_LOG("%MAGMA_BUG%", pTerm!=&pWC->a[idxTerm]);
++#endif
++#endif
+   pTerm->prereqRight |= extraRight;
+ }
+ 
+diff --git a/src/window.c b/src/window.c
+index f33c511..bbd1b88 100644
+--- a/src/window.c
++++ b/src/window.c
+@@ -912,7 +912,12 @@ static ExprList *exprListAppendList(
+         if( sqlite3ExprIsInteger(pSub, &iDummy) ){
+           pSub->op = TK_NULL;
+           pSub->flags &= ~(EP_IntValue|EP_IsTrue|EP_IsFalse);
++#ifdef MAGMA_ENABLE_FIXES
+           pSub->u.zToken = 0;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++          MAGMA_LOG("%MAGMA_BUG%", pDup->u.zToken !=0);
++#endif
+         }
+       }
+       pList = sqlite3ExprListAppend(pParse, pList, pDup);

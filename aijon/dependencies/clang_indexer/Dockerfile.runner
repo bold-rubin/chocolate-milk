@@ -1,0 +1,60 @@
+ARG BASE_IMAGE=
+# FROM gcr.io/oss-fuzz-base/base-builder AS aijon-afl-compile-base
+FROM ubuntu:20.04 AS aijon-afl-compile-base
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/Phoenix
+RUN apt-get -y update && apt-get -y upgrade
+RUN apt-get -y update && apt-get install -y gcc g++
+RUN apt-get -y update && \
+    apt-get -o Acquire::http::Timeout=60 install -y \
+    build-essential \
+    software-properties-common \
+    automake \
+    cmake \
+    git \
+    flex \
+    bison \
+    libglib2.0-dev \
+    libpixman-1-dev \
+    python3-setuptools \
+    libgtk-3-dev \
+    gcc-9-plugin-dev \
+    libstdc++-9-dev \
+    ninja-build \
+    gnupg \
+    wget
+RUN apt-get update && apt-get install -y patchelf zlib1g-dev
+
+## Install LLVM-13
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+RUN add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main"
+RUN apt -y update && apt install -y clang-13 lld-13 libc++-13-dev libc++abi-13-dev
+
+ENV SRC=/src
+RUN mkdir -p $SRC/shellphish
+RUN git clone -b v4.30c  https://github.com/AFLplusplus/AFLplusplus $SRC/shellphish/aflplusplus
+COPY aflpp.diff /tmp/aflpp.diff
+RUN cd $SRC/shellphish/aflplusplus && git apply /tmp/aflpp.diff
+
+RUN update-alternatives --install /usr/bin/clang     clang     /usr/bin/clang-13     110 \
+  --slave /usr/bin/clang++  clang++  /usr/bin/clang++-13
+RUN update-alternatives --set clang /usr/bin/clang-13
+RUN update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-13 110
+RUN update-alternatives --set llvm-config /usr/bin/llvm-config-13
+
+COPY precompile_shellphish_aijon /usr/local/bin/
+RUN precompile_shellphish_aijon || (cat "$SRC/shellphish/aflplusplus/utils/aflpp_driver/aflpp_driver.c" && exit 1)
+
+FROM ${BASE_IMAGE} AS final-builder
+
+RUN apt -y update && apt-get -o Acquire::http::Timeout=60 -y install software-properties-common
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+RUN add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main"
+RUN apt -y update && apt install -y clang-13 lld-13 libc++-13-dev libc++abi-13-dev
+
+RUN mkdir -p $SRC/shellphish
+COPY --from=aijon-afl-compile-base $SRC/shellphish/aflplusplus $SRC/shellphish/aflplusplus
+
+RUN rm -rf $SRC/aflplusplus && ln -sf $SRC/shellphish/aflplusplus $SRC/aflplusplus
+ENV AFL_PATH=$SRC/shellphish/aflplusplus

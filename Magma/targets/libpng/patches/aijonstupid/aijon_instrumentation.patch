@@ -1,0 +1,166 @@
+diff --git a/png.c b/png.c
+index a656f7521..1210c0372 100644
+--- a/png.c
++++ b/png.c
+@@ -476,6 +476,8 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 mask,
+    if (png_ptr == NULL || info_ptr == NULL)
+       return;
+ 
++IJON_SET((int)num); /* PATCHID:14408 */
++IJON_SET((int)mask); /* PATCHID:14376 */
+ #ifdef PNG_TEXT_SUPPORTED
+    /* Free text item num or (if num == -1) all text items */
+    if (info_ptr->text != NULL &&
+diff --git a/pngerror.c b/pngerror.c
+index 826585e6c..6cea31709 100644
+--- a/pngerror.c
++++ b/pngerror.c
+@@ -943,16 +943,19 @@ png_safe_execute(png_imagep image_in, int (*function)(png_voidp), png_voidp arg)
+    /* Safely execute function(arg) with png_error returning to this function. */
+    saved_error_buf = image->opaque->error_buf;
+    result = setjmp(safe_jmpbuf) == 0;
++IJON_SET((int)result); /* PATCHID:10176 */
+ 
+    if (result != 0)
+    {
+ 
+       image->opaque->error_buf = safe_jmpbuf;
+       result = function(arg);
++IJON_SET((int)result); /* PATCHID:9663 */
+    }
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+    MAGMA_LOG("PNG002", (image->flags & PNG_IMAGE_FLAG_INVALID) != 0);
++IJON_SET((int)((image->flags & PNG_IMAGE_FLAG_INVALID) != 0)); /* PATCHID:8793 */
+ #endif
+ 
+    image->opaque->error_buf = saved_error_buf;
+diff --git a/pngrutil.c b/pngrutil.c
+index 8df1dc83d..d2ecfbec2 100644
+--- a/pngrutil.c
++++ b/pngrutil.c
+@@ -972,6 +972,7 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+    /* The cast is safe because 'length' is less than 3*PNG_MAX_PALETTE_LENGTH */
+    num = (int)length / 3;
++IJON_MAX((unsigned long long)num); /* PATCHID:13785 */
+ 
+    /* If the palette has 256 or fewer entries but is too large for the bit
+     * depth, we don't issue an error, to preserve the behavior of previous
+@@ -982,7 +983,11 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+       max_palette_length = (1 << png_ptr->bit_depth);
+    else
+       max_palette_length = PNG_MAX_PALETTE_LENGTH;
++IJON_MIN((unsigned long long)max_palette_length); /* PATCHID:12830 */
+ 
++IJON_SET((int)(num > max_palette_length)); /* PATCHID:11963 */
++IJON_CMP((unsigned long long)num, (unsigned long long)max_palette_length); /* PATCHID:11268 */
++IJON_DIST((long long)num, (long long)max_palette_length); /* PATCHID:10817 */
+ #ifdef MAGMA_ENABLE_FIXES
+    if (num > max_palette_length)
+       num = max_palette_length;
+@@ -3190,7 +3195,9 @@ png_check_chunk_length(png_const_structrp png_ptr, png_uint_32 length)
+ #endif
+ 
+       size_t row_factor = (png_uint_32)row_factor_l;
++IJON_CMP((unsigned long long)row_factor_l, (unsigned long long)4294967296); /* PATCHID:8368 */
+ #endif
++IJON_DIST((long long)row_factor, 0); /* PATCHID:7743 */
+       if (png_ptr->height > PNG_UINT_32_MAX/row_factor)
+          idat_limit = PNG_UINT_31_MAX;
+       else
+@@ -3199,8 +3206,10 @@ png_check_chunk_length(png_const_structrp png_ptr, png_uint_32 length)
+       idat_limit += 6 + 5*(idat_limit/row_factor+1); /* zlib+deflate overhead */
+       idat_limit=idat_limit < PNG_UINT_31_MAX? idat_limit : PNG_UINT_31_MAX;
+       limit = limit < idat_limit? idat_limit : limit;
++IJON_MAX((unsigned long long)length); /* PATCHID:7408 */
+    }
+ 
++IJON_DIST((long long)length, (long long)limit); /* PATCHID:7018 */
+    if (length > limit)
+    {
+       png_debug2(0," length = %lu, limit = %lu",
+@@ -3220,6 +3229,7 @@ void /* PRIVATE */
+ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+ {
+    unsigned int pixel_depth = png_ptr->transformed_pixel_depth;
++
+    png_const_bytep sp = png_ptr->row_buf + 1;
+ #ifdef MAGMA_ENABLE_FIXES
+    png_alloc_size_t row_width = png_ptr->width;
+@@ -3227,6 +3237,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+    png_uint_32 row_width = png_ptr->width;
+ #endif
+    unsigned int pass = png_ptr->pass;
++IJON_SET((int)pass); /* PATCHID:5628 */
+    png_bytep end_ptr = 0;
+    png_byte end_byte = 0;
+    unsigned int end_mask;
+@@ -3475,9 +3486,11 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+             png_error(png_ptr, "invalid user transform pixel depth");
+ 
+          pixel_depth >>= 3; /* now in bytes */
++IJON_SET((int)pixel_depth); /* PATCHID:5211 */
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+          MAGMA_LOG("PNG004", (row_width * pixel_depth) != (u_int64_t)row_width * pixel_depth);
++IJON_DIST((long long)(row_width * pixel_depth), (long long)((unsigned long long)row_width * pixel_depth)); /* PATCHID:4886 */
+ #endif
+          row_width *= pixel_depth;
+ 
+@@ -3501,6 +3514,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+              * passes are skipped above - the entire expanded row is copied.
+              */
+             bytes_to_copy = (1<<((6-pass)>>1)) * pixel_depth;
++IJON_SET((int)bytes_to_copy); /* PATCHID:4608 */
+ 
+             /* But don't allow this number to exceed the actual row width. */
+             if (bytes_to_copy > row_width)
+@@ -3516,6 +3530,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+ 
+          /* In Adam7 there is a constant offset between where the pixels go. */
+          bytes_to_jump = PNG_PASS_COL_OFFSET(pass) * pixel_depth;
++IJON_SET((int)bytes_to_jump); /* PATCHID:4261 */
+ 
+          /* And simply copy these bytes.  Some optimization is possible here,
+           * depending on the value of 'bytes_to_copy'.  Special case the low
+@@ -4470,6 +4485,7 @@ png_read_start_row(png_structrp png_ptr)
+    }
+ 
+    max_pixel_depth = (unsigned int)png_ptr->pixel_depth;
++IJON_SET((int)max_pixel_depth); /* PATCHID:3457 */
+ 
+    /* WARNING: * png_read_transform_info (pngrtran.c) performs a simpler set of
+     * calculations to calculate the final pixel depth, then
+@@ -4484,6 +4500,7 @@ png_read_start_row(png_structrp png_ptr)
+ #ifdef PNG_READ_PACK_SUPPORTED
+    if ((png_ptr->transformations & PNG_PACK) != 0 && png_ptr->bit_depth < 8)
+       max_pixel_depth = 8;
++IJON_INC((int)max_pixel_depth); /* PATCHID:2453 */
+ #endif
+ 
+ #ifdef PNG_READ_EXPAND_SUPPORTED
+@@ -4505,6 +4522,7 @@ png_read_start_row(png_structrp png_ptr)
+ 
+          if (png_ptr->num_trans != 0)
+             max_pixel_depth *= 2;
++IJON_INC((int)max_pixel_depth); /* PATCHID:1730 */
+       }
+ 
+       else if (png_ptr->color_type == PNG_COLOR_TYPE_RGB)
+@@ -4512,6 +4530,7 @@ png_read_start_row(png_structrp png_ptr)
+          if (png_ptr->num_trans != 0)
+          {
+             max_pixel_depth *= 4;
++IJON_INC((int)max_pixel_depth); /* PATCHID:1308 */
+             max_pixel_depth /= 3;
+          }
+       }
+@@ -4529,6 +4548,7 @@ png_read_start_row(png_structrp png_ptr)
+       {
+          if (png_ptr->bit_depth < 16)
+             max_pixel_depth *= 2;
++IJON_INC((int)max_pixel_depth); /* PATCHID:766 */
+       }
+       else
+ #  endif

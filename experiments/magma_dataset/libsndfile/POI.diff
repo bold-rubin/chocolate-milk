@@ -1,0 +1,402 @@
+diff --git a/src/paf.c b/src/paf.c
+index 459bc46..21b3b2d 100644
+--- a/src/paf.c
++++ b/src/paf.c
+@@ -198,8 +198,13 @@ paf_read_header	(SF_PRIVATE *psf)
+ 		psf->endian = SF_ENDIAN_BIG ;
+ 		} ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (paf_fmt.channels < 1 || paf_fmt.channels > SF_MAX_CHANNELS)
+ 		return SFE_PAF_BAD_CHANNELS ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", MAGMA_OR(paf_fmt.channels < 1, paf_fmt.channels > SF_MAX_CHANNELS));
++#endif
+ 
+ 	psf->datalength = psf->filelength - psf->dataoffset ;
+ 
+diff --git a/src/sd2.c b/src/sd2.c
+index dd3dbef..1e6fbc4 100644
+--- a/src/sd2.c
++++ b/src/sd2.c
+@@ -457,10 +457,15 @@ sd2_parse_rsrc_fork (SF_PRIVATE *psf)
+ 
+ 	rsrc.type_offset = rsrc.map_offset + 30 ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (rsrc.map_offset + 28 > rsrc.rsrc_len)
+ 	{	psf_log_printf (psf, "Bad map offset.\n") ;
+ 		goto parse_rsrc_fork_cleanup ;
+ 		} ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", rsrc.map_offset + 28 > rsrc.rsrc_len);
++#endif
+ 
+ 	rsrc.type_count = read_rsrc_short (&rsrc, rsrc.map_offset + 28) + 1 ;
+ 	if (rsrc.type_count < 1)
+diff --git a/src/file_io.c b/src/file_io.c
+index 9cd9379..c3def11 100644
+--- a/src/file_io.c
++++ b/src/file_io.c
+@@ -358,8 +358,13 @@ psf_fwrite (const void *ptr, sf_count_t bytes, sf_count_t items, SF_PRIVATE *psf
+ {	sf_count_t total = 0 ;
+ 	ssize_t	count ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (bytes == 0 || items == 0)
+ 		return 0 ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", MAGMA_OR(bytes == 0, items == 0));
++#endif
+ 
+ 	if (psf->virtual_io)
+ 		return psf->vio.write (ptr, bytes*items, psf->vio_user_data) / bytes ;
+diff --git a/src/aiff.c b/src/aiff.c
+index d872a89..1c05e2f 100644
+--- a/src/aiff.c
++++ b/src/aiff.c
+@@ -1773,7 +1773,14 @@ aiff_read_chanmap (SF_PRIVATE * psf, unsigned dword)
+ 		psf_binheader_readf (psf, "j", dword - bytesread) ;
+ 
+ 	if (map_info->channel_map != NULL)
++#ifdef MAGMA_ENABLE_FIXES
+ 	{	size_t chanmap_size = SF_MIN (psf->sf.channels, layout_tag & 0xffff) * sizeof (psf->channel_map [0]) ;
++#else
++	{    size_t chanmap_size = psf->sf.channels * sizeof (psf->channel_map [0]) ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++	    MAGMA_LOG("%MAGMA_BUG%", psf->sf.channels > (layout_tag & 0xffff));
++#endif
+ 
+ 		free (psf->channel_map) ;
+ 
+diff --git a/src/flac.c b/src/flac.c
+index 64d0172..1c5503f 100644
+--- a/src/flac.c
++++ b/src/flac.c
+@@ -169,6 +169,7 @@ flac_buffer_copy (SF_PRIVATE *psf)
+ 	const int32_t* const *buffer = pflac->wbuffer ;
+ 	unsigned i = 0, j, offset, channels, len ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (psf->sf.channels != (int) frame->header.channels)
+ 	{	psf_log_printf (psf, "Error: FLAC frame changed from %d to %d channels\n"
+ 									"Nothing to do but to error out.\n" ,
+@@ -176,6 +177,10 @@ flac_buffer_copy (SF_PRIVATE *psf)
+ 		psf->error = SFE_FLAC_CHANNEL_COUNT_CHANGED ;
+ 		return 0 ;
+ 		} ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", psf->sf.channels != (int) frame->header.channels);
++#endif
+ 
+ 	/*
+ 	**	frame->header.blocksize is variable and we're using a constant blocksize
+diff --git a/src/flac.c b/src/flac.c
+index 64d0172..9f18e19 100644
+--- a/src/flac.c
++++ b/src/flac.c
+@@ -449,11 +449,16 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
+ 				return ;
+ 				} ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 			if (psf->sf.channels > 0 && psf->sf.samplerate != (int) metadata->data.stream_info.sample_rate)
+ 			{	psf_log_printf (psf, "Warning: FLAC stream changed sample rates from %d to %d.\n"
+ 									"Carrying on as if nothing happened.",
+ 									psf->sf.samplerate, metadata->data.stream_info.sample_rate) ;
+ 				} ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(psf->sf.channels > 0, psf->sf.samplerate != (int) metadata->data.stream_info.sample_rate));
++#endif
+ 			psf->sf.channels = metadata->data.stream_info.channels ;
+ 			psf->sf.samplerate = metadata->data.stream_info.sample_rate ;
+ 			psf->sf.frames = metadata->data.stream_info.total_samples ;
+diff --git a/src/common.c b/src/common.c
+index c9737a9..dbd93f1 100644
+--- a/src/common.c
++++ b/src/common.c
+@@ -686,6 +686,7 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 					strptr = va_arg (argptr, char *) ;
+ 					size = strlen (strptr) + 1 ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 					if (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len && psf_bump_header_allocation (psf, 4 + size + (size & 1)))
+ 						return count ;
+ 
+@@ -695,6 +696,25 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 						header_put_le_int (psf, size + (size & 1)) ;
+ 					memcpy (&(psf->header.ptr [psf->header.indx]), strptr, size) ;
+ 					size += (size & 1) ;
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("%MAGMA_BUG%", psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len);
++#endif
++                    int padding = size & 1 ;
++                    size += (size & 1) ;
++
++					if (psf->header.indx + (sf_count_t) size >= psf->header.len && psf_bump_header_allocation (psf, 16))
++					    return count ;
++
++					if (psf->rwf_endian == SF_ENDIAN_BIG)
++						header_put_be_int (psf, size) ;
++					else
++						header_put_le_int (psf, size) ;
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("%MAGMA_BUG%", padding == 1);
++#endif
++					memcpy (&(psf->header.ptr [psf->header.indx]), strptr, size) ;
++#endif
+ 					psf->header.indx += size ;
+ 					psf->header.ptr [psf->header.indx - 1] = 0 ;
+ 					count += 4 + size ;
+diff --git a/src/common.c b/src/common.c
+index c9737a9..08dff8d 100644
+--- a/src/common.c
++++ b/src/common.c
+@@ -707,15 +707,29 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 					*/
+ 					strptr = va_arg (argptr, char *) ;
+ 					size = strlen (strptr) ;
++#ifdef MAGMA_ENABLE_FIXES
+ 					if (psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len && psf_bump_header_allocation (psf, 4 + size + (size & 1)))
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++					MAGMA_LOG("%MAGMA_BUG%", psf->header.indx + 4 + (sf_count_t) size + (sf_count_t) (size & 1) > psf->header.len);
++#endif
++					if (psf->header.indx + (sf_count_t) size > psf->header.len && psf_bump_header_allocation (psf, size))
++#endif
+ 						break ;
+ 					if (psf->rwf_endian == SF_ENDIAN_BIG)
+ 						header_put_be_int (psf, size) ;
+ 					else
+ 						header_put_le_int (psf, size) ;
++#ifdef MAGMA_ENABLE_FIXES
+ 					memcpy (&(psf->header.ptr [psf->header.indx]), strptr, size + (size & 1)) ;
++#else
++					memcpy (&(psf->header.ptr [psf->header.indx]), strptr, size + 1) ;
++#endif
+ 					size += (size & 1) ;
+ 					psf->header.indx += size ;
++#ifndef MAGMA_ENABLE_FIXES
++					psf->header.ptr [psf->header.indx] = 0 ;
++#endif
+ 					count += 4 + size ;
+ 					break ;
+ 
+diff --git a/src/common.c b/src/common.c
+index c9737a9..d8f38a6 100644
+--- a/src/common.c
++++ b/src/common.c
+@@ -727,7 +727,14 @@ psf_binheader_writef (SF_PRIVATE *psf, const char *format, ...)
+ 					size = (size & 1) ? size : size + 1 ;
+ 					size = (size > 254) ? 254 : size ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 					if (psf->header.indx + 1 + (sf_count_t) size > psf->header.len && psf_bump_header_allocation (psf, 1 + size))
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++					MAGMA_LOG("%MAGMA_BUG%", psf->header.indx + 1 + (sf_count_t) size > psf->header.len);
++#endif
++					if (psf->header.indx + (sf_count_t) size > psf->header.len && psf_bump_header_allocation (psf, size))
++#endif
+ 						break ;
+ 
+ 					header_put_byte (psf, size) ;
+diff --git a/src/alaw.c b/src/alaw.c
+index 6e0a794..c1f2bf4 100644
+--- a/src/alaw.c
++++ b/src/alaw.c
+@@ -349,9 +349,17 @@ f2alaw_array (const float *ptr, int count, unsigned char *buffer, float normfact
+ static inline void
+ d2alaw_array (const double *ptr, int count, unsigned char *buffer, double normfact)
+ {	for (int i = 0 ; i < count ; i++)
++#ifdef MAGMA_ENABLE_FIXES
+ 	{	if (!isfinite (ptr [i]))
+ 			buffer [i] = 0 ;
+ 		else if (ptr [i] >= 0)
++#else
++	{
++#ifdef MAGMA_ENABLE_CANARIES
++		MAGMA_LOG("%MAGMA_BUG%", !isfinite(ptr[i]));
++#endif
++		if (ptr [i] >= 0)
++#endif
+ 			buffer [i] = alaw_encode [psf_lrint (normfact * ptr [i])] ;
+ 		else
+ 			buffer [i] = 0x7F & alaw_encode [- psf_lrint (normfact * ptr [i])] ;
+diff --git a/src/alaw.c b/src/alaw.c
+index 6e0a794..61b0f42 100644
+--- a/src/alaw.c
++++ b/src/alaw.c
+@@ -327,9 +327,17 @@ s2alaw_array (const short *ptr, int count, unsigned char *buffer)
+ static inline void
+ i2alaw_array (const int *ptr, int count, unsigned char *buffer)
+ {	for (int i = 0 ; i < count ; i++)
++#ifdef MAGMA_ENABLE_FIXES
+ 	{	if (ptr [i] == INT_MIN)
+ 			buffer [i] = alaw_encode [INT_MAX >> (16 + 4)] ;
+ 		else if (ptr [i] >= 0)
++#else
++	{
++#ifdef MAGMA_ENABLE_CANARIES
++		MAGMA_LOG("%MAGMA_BUG%", ptr[i] == INT_MIN);
++#endif
++		if (ptr [i] >= 0)
++#endif
+ 			buffer [i] = alaw_encode [ptr [i] >> (16 + 4)] ;
+ 		else
+ 			buffer [i] = 0x7F & alaw_encode [- ptr [i] >> (16 + 4)] ;
+diff --git a/src/double64.c b/src/double64.c
+index fb6d468..bdbbda4 100644
+--- a/src/double64.c
++++ b/src/double64.c
+@@ -91,7 +91,14 @@ int
+ double64_init	(SF_PRIVATE *psf)
+ {	static int double64_caps ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 	if (psf->sf.channels < 1 || psf->sf.channels > SF_MAX_CHANNELS)
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("%MAGMA_BUG%", psf->sf.channels > SF_MAX_CHANNELS);
++#endif
++	if (psf->sf.channels < 1)
++#endif
+ 	{	psf_log_printf (psf, "double64_init : internal error : channels = %d\n", psf->sf.channels) ;
+ 		return SFE_INTERNAL ;
+ 		} ;
+diff --git a/src/wavlike.c b/src/wavlike.c
+index b59c684..bbfab02 100644
+--- a/src/wavlike.c
++++ b/src/wavlike.c
+@@ -335,8 +335,15 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ 					/* Terminate the buffer we're going to append_snprintf into. */
+ 					buffer [0] = 0 ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 					for (bit = k = 0 ; bit < ARRAY_LEN (channel_mask_bits) && k < psf->sf.channels ; bit++)
++#else
++					for (bit = k = 0 ; bit < ARRAY_LEN (channel_mask_bits) ; bit++)
++#endif
+ 					{
++#ifdef MAGMA_ENABLE_CANARIES
++                        MAGMA_LOG("%MAGMA_BUG%", k >= psf->sf.channels);
++#endif
+ 						if (wav_fmt->ext.channelmask & (1 << bit))
+ 						{	if (k > psf->sf.channels)
+ 							{	psf_log_printf (psf, "*** More channel map bits than there are channels.\n") ;
+diff --git a/src/wavlike.c b/src/wavlike.c
+index b59c684..5947148 100644
+--- a/src/wavlike.c
++++ b/src/wavlike.c
+@@ -350,10 +350,18 @@ wavlike_read_fmt_chunk (SF_PRIVATE *psf, int fmtsize)
+ 
+ 					/* Remove trailing ", ". */
+ 					bit = strlen (buffer) ;
++#ifdef MAGMA_ENABLE_FIXES
+ 					if (bit >= 2)
+ 					{	buffer [--bit] = 0 ;
+ 						buffer [--bit] = 0 ;
+ 						} ;
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++                    MAGMA_LOG("%MAGMA_BUG%", bit < 2);
++#endif
++                    buffer [--bit] = 0 ;
++					buffer [--bit] = 0 ;
++#endif
+ 
+ 					if (k != psf->sf.channels)
+ 					{	psf_log_printf (psf, "  Channel Mask  : 0x%X\n", wav_fmt->ext.channelmask) ;
+diff --git a/src/ulaw.c b/src/ulaw.c
+index 744e354..57da681 100644
+--- a/src/ulaw.c
++++ b/src/ulaw.c
+@@ -850,9 +850,17 @@ f2ulaw_array (const float *ptr, int count, unsigned char *buffer, float normfact
+ static inline void
+ d2ulaw_array (const double *ptr, int count, unsigned char *buffer, double normfact)
+ {	for (int i = 0 ; i < count ; i++)
++#ifdef MAGMA_ENABLE_FIXES
+ 	{	if (!isfinite (ptr [i]))
+ 			buffer [i] = 0 ;
+ 		else if (ptr [i] >= 0)
++#else
++	{
++#ifdef MAGMA_ENABLE_CANARIES
++		MAGMA_LOG("%MAGMA_BUG%", !isfinite(ptr[i]));
++#endif
++		if (ptr [i] >= 0)
++#endif
+ 			buffer [i] = ulaw_encode [psf_lrint (normfact * ptr [i])] ;
+ 		else
+ 			buffer [i] = 0x7F & ulaw_encode [- psf_lrint (normfact * ptr [i])] ;
+diff --git a/src/ulaw.c b/src/ulaw.c
+index 744e354..96f2f40 100644
+--- a/src/ulaw.c
++++ b/src/ulaw.c
+@@ -828,9 +828,17 @@ s2ulaw_array (const short *ptr, int count, unsigned char *buffer)
+ static inline void
+ i2ulaw_array (const int *ptr, int count, unsigned char *buffer)
+ {	for (int i = 0 ; i < count ; i++)
++#ifdef MAGMA_ENABLE_FIXES
+ 	{	if (ptr [i] == INT_MIN)
+ 			buffer [i] = ulaw_encode [INT_MAX >> (16 + 2)] ;
+ 		else if (ptr [i] >= 0)
++#else
++	{
++#ifdef MAGMA_ENABLE_CANARIES
++	MAGMA_LOG("%MAGMA_BUG%", ptr[i] == INT_MIN);
++#endif
++		if (ptr [i] >= 0)
++#endif
+ 			buffer [i] = ulaw_encode [ptr [i] >> (16 + 2)] ;
+ 		else
+ 			buffer [i] = 0x7F & ulaw_encode [-ptr [i] >> (16 + 2)] ;
+diff --git a/src/flac.c b/src/flac.c
+index 64d0172..f3d2edb 100644
+--- a/src/flac.c
++++ b/src/flac.c
+@@ -441,6 +441,7 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
+ 
+ 	switch (metadata->type)
+ 	{	case FLAC__METADATA_TYPE_STREAMINFO :
++#ifdef MAGMA_ENABLE_FIXES
+ 			if (psf->sf.channels > 0 && psf->sf.channels != (int) metadata->data.stream_info.channels)
+ 			{	psf_log_printf (psf, "Error: FLAC stream changed from %d to %d channels\n"
+ 									"Nothing to do but to error out.\n" ,
+@@ -448,6 +449,10 @@ sf_flac_meta_callback (const FLAC__StreamDecoder * UNUSED (decoder), const FLAC_
+ 				psf->error = SFE_FLAC_CHANNEL_COUNT_CHANGED ;
+ 				return ;
+ 				} ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(psf->sf.channels > 0, psf->sf.channels != (int) metadata->data.stream_info.channels));
++#endif
+ 
+ 			if (psf->sf.channels > 0 && psf->sf.samplerate != (int) metadata->data.stream_info.sample_rate)
+ 			{	psf_log_printf (psf, "Warning: FLAC stream changed sample rates from %d to %d.\n"
+diff --git a/src/wav.c b/src/wav.c
+index fd3e453..0bdcd02 100644
+--- a/src/wav.c
++++ b/src/wav.c
+@@ -1151,9 +1151,14 @@ wav_write_header (SF_PRIVATE *psf, int calc_length)
+ 		psf_binheader_writef (psf, "44", BHW4 (0), BHW4 (0)) ; /* SMTPE format */
+ 		psf_binheader_writef (psf, "44", BHW4 (psf->instrument->loop_count), BHW4 (0)) ;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+ 		/* Make sure we don't read past the loops array end. */
+ 		if (psf->instrument->loop_count > ARRAY_LEN (psf->instrument->loops))
+ 			psf->instrument->loop_count = ARRAY_LEN (psf->instrument->loops) ;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("%MAGMA_BUG%", psf->instrument->loop_count > ARRAY_LEN (psf->instrument->loops));
++#endif
+ 
+ 		for (tmp = 0 ; tmp < psf->instrument->loop_count ; tmp++)
+ 		{	int type ;

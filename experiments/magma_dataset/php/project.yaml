@@ -1,0 +1,8 @@
+language: c
+shellphish_project_name: php
+shellphish_harness_paths:
+  - "json"
+  - "exif"
+  - "mbstring"
+  - "unserialize"
+  - "parser"

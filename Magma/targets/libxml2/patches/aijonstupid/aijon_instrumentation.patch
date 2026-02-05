@@ -1,0 +1,850 @@
+diff --git a/HTMLparser.c b/HTMLparser.c
+index f5df59c2..a3b53ed3 100644
+--- a/HTMLparser.c
++++ b/HTMLparser.c
+@@ -2650,6 +2650,7 @@ htmlParseName(htmlParserCtxtPtr ctxt) {
+ 	       (*in == '_') || (*in == '-') ||
+ 	       (*in == ':') || (*in == '.'))
+ 	    in++;
++IJON_DIST((long long)in, (long long)ctxt->input->end); /* PATCHID:48264 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+ 	if (in == ctxt->input->end)
+@@ -2661,6 +2662,9 @@ htmlParseName(htmlParserCtxtPtr ctxt) {
+ 
+ 	if ((*in > 0) && (*in < 0x80)) {
+ 	    count = in - ctxt->input->cur;
++IJON_MIN((unsigned long long)(ctxt->input->end - in)); /* PATCHID:47949 */
++IJON_MAX((unsigned long long)count); /* PATCHID:47215 */
++IJON_INC(count); /* PATCHID:46847 */
+ 	    ret = xmlDictLookup(ctxt->dict, ctxt->input->cur, count);
+ 	    ctxt->input->cur = in;
+ 	    ctxt->input->col += count;
+@@ -2676,6 +2680,7 @@ htmlParseNameComplex(xmlParserCtxtPtr ctxt) {
+     int c;
+     int count = 0;
+     const xmlChar *base = ctxt->input->base;
++IJON_SET((unsigned long long)base); /* PATCHID:39585 */
+ 
+     /*
+      * Handler for more complex cases
+@@ -2698,11 +2703,15 @@ htmlParseNameComplex(xmlParserCtxtPtr ctxt) {
+ 	    count = 0;
+ 	    GROW;
+ 	}
++IJON_MAX((unsigned long long)count); /* PATCHID:38806 */
+ 	len += l;
++IJON_INC((int)count); /* PATCHID:38098 */
+ 	NEXTL(l);
+ 	c = CUR_CHAR(l);
++IJON_MAX((unsigned long long)len); /* PATCHID:37238 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 	if (ctxt->input->base != base) {
++IJON_CMP((unsigned long long)ctxt->input->base, (unsigned long long)base); /* PATCHID:37102 */
+ 	    /*
+ 	     * We changed encoding from an unknown encoding
+ 	     * Input buffer changed location, so we better start again
+@@ -2985,6 +2994,7 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+         return(NULL);
+     }
+     quote = CUR;
++IJON_SET((int) quote); /* PATCHID:36814 */
+     NEXT;
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+@@ -2993,6 +3003,7 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+ #endif
+     startPosition = CUR_PTR - BASE_PTR;
+     q = CUR_PTR;
++IJON_DIST((long long) q, (long long) (BASE_PTR + startPosition)); /* PATCHID:36424 */
+ 
+     while ((CUR != 0) && (CUR != quote)) {
+         /* TODO: Handle UTF-8 */
+@@ -3000,9 +3011,11 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+             htmlParseErrInt(ctxt, XML_ERR_INVALID_CHAR,
+                             "Invalid char in SystemLiteral 0x%X\n", CUR);
+             err = 1;
++IJON_INC(err); /* PATCHID:36230 */
+         }
+         NEXT;
+         len++;
++IJON_MAX((unsigned long long) len); /* PATCHID:35666 */
+     }
+     if (CUR != quote) {
+         htmlParseErr(ctxt, XML_ERR_LITERAL_NOT_FINISHED,
+@@ -3015,6 +3028,7 @@ htmlParseSystemLiteral(htmlParserCtxtPtr ctxt) {
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", q != (BASE_PTR+startPosition));
++IJON_CMP((unsigned long long) (q != (BASE_PTR + startPosition)), (unsigned long long) 1); /* PATCHID:35405 */
+ #endif
+         ret = xmlStrndup(q, CUR_PTR - q);
+         NEXT;
+@@ -3049,6 +3063,7 @@ htmlParsePubidLiteral(htmlParserCtxtPtr ctxt) {
+         return(NULL);
+     }
+     quote = CUR;
++IJON_SET((int) quote); /* PATCHID:34896 */
+     NEXT;
+ 
+     /*
+@@ -3060,14 +3075,17 @@ htmlParsePubidLiteral(htmlParserCtxtPtr ctxt) {
+ #endif
+     startPosition = CUR_PTR - BASE_PTR;
+     q = CUR_PTR;
++IJON_CTX(313); /* PATCHID:34292 */
+ 
+     while ((CUR != 0) && (CUR != quote)) {
+         if (!IS_PUBIDCHAR_CH(CUR)) {
+             htmlParseErrInt(ctxt, XML_ERR_INVALID_CHAR,
+                             "Invalid char in PubidLiteral 0x%X\n", CUR);
+             err = 1;
++IJON_INC((int) err); /* PATCHID:33554 */
+         }
+         len++;
++IJON_INC((int) len); /* PATCHID:33483 */
+         NEXT;
+     }
+ 
+@@ -3082,6 +3100,7 @@ htmlParsePubidLiteral(htmlParserCtxtPtr ctxt) {
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("%MAGMA_BUG%", q != (BASE_PTR+startPosition));
++IJON_DIST((long long) q, (long long) startPosition); /* PATCHID:33364 */
+ #endif
+         ret = xmlStrndup(q, CUR_PTR - q);
+         NEXT;
+@@ -5467,6 +5486,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ 
+     htmlParserNodeInfo node_info;
+ 
++IJON_SET((int)ctxt->instate); /* PATCHID:14808 */
+ #ifdef DEBUG_PUSH
+     switch (ctxt->instate) {
+ 	case XML_PARSER_EOF:
+@@ -5531,6 +5551,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+                     (in->cur - in->base);
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", avail != (in->end - in->cur));
++IJON_DIST((long long)avail, (long long)(in->end - in->cur)); /* PATCHID:14002 */
+ #endif
+ 	if ((avail == 0) && (terminate)) {
+ 	    htmlAutoCloseOnEnd(ctxt);
+@@ -5552,6 +5573,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+          * We should consider removing this check.
+          */
+ 	cur = in->cur[0];
++IJON_SET((int)cur); /* PATCHID:13516 */
+ 	if (cur == 0) {
+ 	    SKIP(1);
+ 	    continue;
+@@ -5599,12 +5621,14 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParseDocTypeDecl(ctxt);
+ 		    ctxt->instate = XML_PARSER_PROLOG;
++IJON_INC((int)ctxt->instate); /* PATCHID:13444 */
+ #ifdef DEBUG_PUSH
+ 		    xmlGenericError(xmlGenericErrorContext,
+ 			    "HPP: entering PROLOG\n");
+ #endif
+                 } else {
+ 		    ctxt->instate = XML_PARSER_MISC;
++IJON_INC((int)ctxt->instate); /* PATCHID:13141 */
+ #ifdef DEBUG_PUSH
+ 		    xmlGenericError(xmlGenericErrorContext,
+ 			    "HPP: entering MISC\n");
+@@ -5645,6 +5669,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParseComment(ctxt);
+ 		    ctxt->instate = XML_PARSER_MISC;
++IJON_INC((int)ctxt->instate); /* PATCHID:12611 */
+ 	        } else if ((cur == '<') && (next == '?')) {
+ 		    if ((!terminate) &&
+ 		        (htmlParseLookupSequence(ctxt, '>', 0, 0, 0) < 0))
+@@ -5655,6 +5680,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParsePI(ctxt);
+ 		    ctxt->instate = XML_PARSER_MISC;
++IJON_INC((int)ctxt->instate); /* PATCHID:12167 */
+ 		} else if ((cur == '<') && (next == '!') &&
+ 		    (UPP(2) == 'D') && (UPP(3) == 'O') &&
+ 		    (UPP(4) == 'C') && (UPP(5) == 'T') &&
+@@ -5669,6 +5695,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParseDocTypeDecl(ctxt);
+ 		    ctxt->instate = XML_PARSER_PROLOG;
++IJON_INC((int)ctxt->instate); /* PATCHID:11845 */
+ #ifdef DEBUG_PUSH
+ 		    xmlGenericError(xmlGenericErrorContext,
+ 			    "HPP: entering PROLOG\n");
+@@ -5678,6 +5705,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ 		    goto done;
+ 		} else {
+ 		    ctxt->instate = XML_PARSER_CONTENT;
++IJON_INC((int)ctxt->instate); /* PATCHID:11782 */
+ #ifdef DEBUG_PUSH
+ 		    xmlGenericError(xmlGenericErrorContext,
+ 			    "HPP: entering START_TAG\n");
+@@ -5705,6 +5733,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParseComment(ctxt);
+ 		    ctxt->instate = XML_PARSER_PROLOG;
++IJON_INC((int)ctxt->instate); /* PATCHID:11504 */
+ 	        } else if ((cur == '<') && (next == '?')) {
+ 		    if ((!terminate) &&
+ 		        (htmlParseLookupSequence(ctxt, '>', 0, 0, 0) < 0))
+@@ -5715,11 +5744,13 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParsePI(ctxt);
+ 		    ctxt->instate = XML_PARSER_PROLOG;
++IJON_INC((int)ctxt->instate); /* PATCHID:11404 */
+ 		} else if ((cur == '<') && (next == '!') &&
+ 		           (avail < 4)) {
+ 		    goto done;
+ 		} else {
+ 		    ctxt->instate = XML_PARSER_CONTENT;
++IJON_INC((int)ctxt->instate); /* PATCHID:10805 */
+ #ifdef DEBUG_PUSH
+ 		    xmlGenericError(xmlGenericErrorContext,
+ 			    "HPP: entering START_TAG\n");
+@@ -5752,6 +5783,7 @@ htmlParseTryOrFinish(htmlParserCtxtPtr ctxt, int terminate) {
+ #endif
+ 		    htmlParseComment(ctxt);
+ 		    ctxt->instate = XML_PARSER_EPILOG;
++IJON_INC((int)ctxt->instate); /* PATCHID:9874 */
+ 	        } else if ((cur == '<') && (next == '?')) {
+ 		    if ((!terminate) &&
+ 		        (htmlParseLookupSequence(ctxt, '>', 0, 0, 0) < 0))
+diff --git a/parser.c b/parser.c
+index a31736c6..a6564e3a 100644
+--- a/parser.c
++++ b/parser.c
+@@ -2684,17 +2684,21 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+     while ((c != 0) && (c != end) && /* non input consuming loop */
+            (c != end2) && (c != end3) &&
+            (ctxt->instate != XML_PARSER_EOF)) {
++IJON_SET((int)c); /* PATCHID:46111 */
+ 
+ 	if (c == 0) break;
+         if ((c == '&') && (str[1] == '#')) {
++IJON_CTX(207); /* PATCHID:45101 */
+ 	    int val = xmlParseStringCharRef(ctxt, &str);
+ 	    if (val == 0)
+                 goto int_error;
+ 	    COPY_BUF(0,buffer,nbchars,val);
++IJON_MAX((unsigned long long)nbchars); /* PATCHID:44237 */
+ 	    if (nbchars + XML_PARSER_BUFFER_SIZE > buffer_size) {
+ 	        growBuffer(buffer, XML_PARSER_BUFFER_SIZE);
+ 	    }
+ 	} else if ((c == '&') && (what & XML_SUBSTITUTE_REF)) {
++IJON_CTX(200); /* PATCHID:43976 */
+ 	    if (xmlParserDebugEntities)
+ 		xmlGenericError(xmlGenericErrorContext,
+ 			"String decoding Entity Reference: %.30s\n",
+@@ -2703,6 +2707,7 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 	    xmlParserEntityCheck(ctxt, 0, ent, 0);
+ 	    if (ent != NULL)
+ 	        ctxt->nbentities += ent->checked / 2;
++IJON_INC((int)ctxt->nbentities); /* PATCHID:43405 */
+ 	    if ((ent != NULL) &&
+ 		(ent->etype == XML_INTERNAL_PREDEFINED_ENTITY)) {
+ 		if (ent->content != NULL) {
+@@ -2717,9 +2722,11 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 		}
+ 	    } else if ((ent != NULL) && (ent->content != NULL)) {
+ 		ctxt->depth++;
++IJON_INC((int)ctxt->depth); /* PATCHID:43115 */
+ 		rep = xmlStringDecodeEntities(ctxt, ent->content, what,
+ 			                      0, 0, 0);
+ 		ctxt->depth--;
++IJON_INC((int)ctxt->depth); /* PATCHID:42840 */
+ 		if (rep == NULL) {
+                     ent->content[0] = 0;
+                     goto int_error;
+@@ -2749,6 +2756,7 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 		buffer[nbchars++] = ';';
+ 	    }
+ 	} else if (c == '%' && (what & XML_SUBSTITUTE_PEREF)) {
++IJON_CTX(364); /* PATCHID:41857 */
+ 	    if (xmlParserDebugEntities)
+ 		xmlGenericError(xmlGenericErrorContext,
+ 			"String decoding PE Reference: %.30s\n", str);
+@@ -2756,9 +2764,11 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 	    xmlParserEntityCheck(ctxt, 0, ent, 0);
+ 	    if (ent != NULL)
+ 	        ctxt->nbentities += ent->checked / 2;
++IJON_INC((int)ctxt->nbentities); /* PATCHID:41277 */
+ 	    if (ent != NULL) {
+                 if (ent->content == NULL) {
+ 		    int m_tmp = 1;
++IJON_SET((int)m_tmp); /* PATCHID:41246 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 		    /*
+ 		     * Note: external parsed entities will not be loaded,
+@@ -2769,15 +2779,18 @@ xmlStringLenDecodeEntities(xmlParserCtxtPtr ctxt, const xmlChar *str, int len,
+ 		    if (((ctxt->options & XML_PARSE_NOENT) != 0) ||
+ 			((ctxt->options & XML_PARSE_DTDVALID) != 0) ||
+ 			(ctxt->validate != 0)) {
++IJON_SET((int)(ctxt->validate != 0)); /* PATCHID:40482 */
+ 			xmlLoadEntityContent(ctxt, ent);
+ 		    } else {
+ 			m_tmp = 0;
++IJON_CMP((unsigned long long)m_tmp, (unsigned long long)0); /* PATCHID:40438 */
+ 			xmlWarningMsg(ctxt, XML_ERR_ENTITY_PROCESSING,
+ 		  "not validating will not read content for PE entity %s\n",
+ 		                      ent->name, NULL);
+ 		    }
+ #else
+ 		    xmlLoadEntityContent(ctxt, ent);
++IJON_CMP((unsigned long long)m_tmp, (unsigned long long)1); /* PATCHID:39916 */
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+ 		    MAGMA_LOG("%MAGMA_BUG%", MAGMA_AND(m_tmp == 1, \
+@@ -3413,6 +3426,7 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+      */
+     GROW;
+     startPosition = CUR_PTR - BASE_PTR;
++IJON_SET((unsigned long long) startPosition); /* PATCHID:32501 */
+     end = ctxt->input->cur;
+     c = CUR_CHAR(l);
+     if ((c == ' ') || (c == '>') || (c == '/') || /* accelerators */
+@@ -3430,12 +3444,17 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+             }
+ 	    count = 0;
+ 	    GROW;
++IJON_CTX(495); /* PATCHID:32140 */
+             if (ctxt->instate == XML_PARSER_EOF)
+                 return(NULL);
+ 	}
+ 	len += l;
++IJON_MAX((unsigned long long) count); /* PATCHID:31735 */
++IJON_SET((int) c); /* PATCHID:31418 */
++IJON_INC((int) len); /* PATCHID:30997 */
+ 	NEXTL(l);
+ 	end = ctxt->input->cur;
++IJON_INC((int) len); /* PATCHID:30171 */
+ 	c = CUR_CHAR(l);
+ 	if (c == 0) {
+ 	    count = 0;
+@@ -3446,6 +3465,7 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+ 	     */
+ 	    ctxt->input->cur -= l;
+ 	    GROW;
++IJON_CTX(436); /* PATCHID:29728 */
+             if (ctxt->instate == XML_PARSER_EOF)
+                 return(NULL);
+ 	    ctxt->input->cur += l;
+@@ -3463,6 +3483,8 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
+ #else
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", (end - len) != (BASE_PTR + startPosition));
++IJON_DIST((long long) (end - len), (long long) (BASE_PTR + startPosition)); /* PATCHID:29328 */
++IJON_CMP((unsigned long long) (end - len), (unsigned long long) (BASE_PTR + startPosition)); /* PATCHID:29221 */
+ #endif
+     return(xmlDictLookup(ctxt->dict, (end - len), len));
+ #endif
+@@ -4915,6 +4937,7 @@ xmlParseComment(xmlParserCtxtPtr ctxt) {
+         (NXT(2) != '-') || (NXT(3) != '-')) return;
+     state = ctxt->instate;
+     ctxt->instate = XML_PARSER_COMMENT;
++IJON_SET((int)ctxt->instate); /* PATCHID:26117 */
+     inputid = ctxt->input->id;
+     SKIP(4);
+     SHRINK;
+@@ -4949,6 +4972,7 @@ get_more:
+ 	    goto get_more;
+ 	}
+ 	nbchar = in - ctxt->input->cur;
++IJON_MAX((unsigned long long)nbchar); /* PATCHID:25829 */
+ 	/*
+ 	 * save current set of data
+ 	 */
+@@ -4982,6 +5006,7 @@ get_more:
+ 		}
+ 		memcpy(&buf[len], ctxt->input->cur, nbchar);
+ 		len += nbchar;
++IJON_MAX((unsigned long long)len); /* PATCHID:25403 */
+ 		buf[len] = 0;
+ 	    }
+ 	}
+@@ -5010,13 +5035,17 @@ get_more:
+ 	SHRINK;
+ 	GROW;
+         if (ctxt->instate == XML_PARSER_EOF) {
++IJON_SET((int)ctxt->instate); /* PATCHID:24533 */
+             xmlFree(buf);
+             return;
+         }
+ 	in = ctxt->input->cur;
+ 	if (*in == '-') {
++IJON_CMP((unsigned long long)*in, (unsigned long long)'-'); /* PATCHID:24090 */
+ 	    if (in[1] == '-') {
++IJON_CMP((unsigned long long)in[1], (unsigned long long)'-'); /* PATCHID:23189 */
+ 	        if (in[2] == '>') {
++IJON_CMP((unsigned long long)in[2], (unsigned long long)'>'); /* PATCHID:22195 */
+ 		    if (ctxt->input->id != inputid) {
+ 			xmlFatalErrMsg(ctxt, XML_ERR_ENTITY_BOUNDARY,
+ 			               "comment doesn't start and stop in the"
+@@ -5036,6 +5065,7 @@ get_more:
+ 			ctxt->instate = state;
+ 		    return;
+ 		}
++IJON_CTX(323); /* PATCHID:21922 */
+ 		if (buf != NULL) {
+ 		    xmlFatalErrMsgStr(ctxt, XML_ERR_HYPHEN_IN_COMMENT,
+ 		                      "Double hyphen within comment: "
+@@ -5045,17 +5075,20 @@ get_more:
+ 		    xmlFatalErrMsgStr(ctxt, XML_ERR_HYPHEN_IN_COMMENT,
+ 		                      "Double hyphen within comment\n", NULL);
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_SET((int)ctxt->instate); /* PATCHID:21179 */
+                 if (ctxt->instate == XML_PARSER_EOF) {
+                     xmlFree(buf);
+                     return;
+                 }
+ #endif
++IJON_CTX(399); /* PATCHID:20355 */
+ #ifdef MAGMA_ENABLE_CANARIES
+                 // According to the discussion on issue #58, this bug is due
+                 // to the fix applied for Bug 030. So it might be possible
+                 // that this bug cannot be triggered unless Bug 030 is disabled.
+                 MAGMA_LOG("%MAGMA_BUG%", ctxt->instate == XML_PARSER_EOF);
+ #endif
++IJON_SET((int)ctxt->instate); /* PATCHID:20024 */
+ 		in++;
+ 		ctxt->input->col++;
+ 	    }
+@@ -7961,6 +7994,7 @@ xmlParsePEReference(xmlParserCtxtPtr ctxt)
+      * Increase the number of entity references parsed
+      */
+     ctxt->nbentities++;
++IJON_INC((int)ctxt->nbentities); /* PATCHID:8969 */
+ 
+     /*
+      * Request the entity from SAX
+@@ -7968,9 +8002,11 @@ xmlParsePEReference(xmlParserCtxtPtr ctxt)
+     if ((ctxt->sax != NULL) &&
+ 	(ctxt->sax->getParameterEntity != NULL))
+ 	entity = ctxt->sax->getParameterEntity(ctxt->userData, name);
++IJON_SET((int)(entity != NULL)); /* PATCHID:8590 */
+     if (ctxt->instate == XML_PARSER_EOF)
+ 	return;
+     if (entity == NULL) {
++IJON_CTX(387); /* PATCHID:8096 */
+ 	/*
+ 	 * [ WFC: Entity Declared ]
+ 	 * In a document without any DTD, a document with only an
+@@ -8391,6 +8427,7 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+     if (RAW == '[') {
+         int baseInputNr = ctxt->inputNr;
+         ctxt->instate = XML_PARSER_DTD;
++IJON_SET((int)ctxt->instate); /* PATCHID:7677 */
+         NEXT;
+ 	/*
+ 	 * Parse the succession of Markup declarations and
+@@ -8399,12 +8436,14 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+ 	 */
+ 	while (((RAW != ']') || (ctxt->inputNr > baseInputNr)) &&
+                (ctxt->instate != XML_PARSER_EOF)) {
++IJON_INC((int)(ctxt->inputNr - baseInputNr)); /* PATCHID:7362 */
+ 	    const xmlChar *check = CUR_PTR;
+ 	    unsigned int cons = ctxt->input->consumed;
+ 
+ 	    SKIP_BLANKS;
+ 	    xmlParseMarkupDecl(ctxt);
+ 	    xmlParsePEReference(ctxt);
++IJON_SET((int)ctxt->inputNr); /* PATCHID:7027 */
+ 
+             /*
+              * Conditional sections are allowed from external entities included
+@@ -8414,6 +8453,7 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+                 (RAW == '<') && (NXT(1) == '!') && (NXT(2) == '[')) {
+                 xmlParseConditionalSections(ctxt);
+             }
++IJON_INC((int)ctxt->inputNr); /* PATCHID:6442 */
+ 
+ 	    if ((CUR_PTR == check) && (cons == ctxt->input->consumed)) {
+ 		xmlFatalErr(ctxt, XML_ERR_INTERNAL_ERROR,
+@@ -8423,8 +8463,10 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+                 else
+ 		    break;
+ 	    }
++IJON_INC(1); /* PATCHID:5516 */
+ 	}
+ 	if (RAW == ']') {
++IJON_CMP((unsigned long long)RAW, (unsigned long long)']'); /* PATCHID:5256 */
+ 	    NEXT;
+ 	    SKIP_BLANKS;
+ 	}
+@@ -8434,6 +8476,7 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+      * We should be at the end of the DOCTYPE declaration.
+      */
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_CMP((unsigned long long)RAW, (unsigned long long)'>'); /* PATCHID:4917 */
+     if (RAW != '>') {
+ 	xmlFatalErr(ctxt, XML_ERR_DOCTYPE_NOT_FINISHED, NULL);
+ 	return;
+@@ -8446,6 +8489,7 @@ xmlParseInternalSubset(xmlParserCtxtPtr ctxt) {
+     // condition (bounds checks and others), we'll use the condition relied
+     // on by the devs when fixing the bug.
+     MAGMA_LOG("%MAGMA_BUG%", RAW != '>');
++IJON_CMP((unsigned long long)RAW, (unsigned long long)'>'); /* PATCHID:4765 */
+ #endif
+     NEXT;
+ }
+@@ -10404,9 +10448,11 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+ 
+     SKIP_BLANKS;
+     if (CMP8(CUR_PTR, 'e', 'n', 'c', 'o', 'd', 'i', 'n', 'g')) {
++IJON_INC(1); /* PATCHID:4762 */
+ 	SKIP(8);
+ 	SKIP_BLANKS;
+ 	if (RAW != '=') {
++IJON_INC(2); /* PATCHID:4054 */
+ 	    xmlFatalErr(ctxt, XML_ERR_EQUAL_REQUIRED, NULL);
+ 	    return(NULL);
+         }
+@@ -10415,6 +10461,7 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+ 	if (RAW == '"') {
+ 	    NEXT;
+ 	    encoding = xmlParseEncName(ctxt);
++IJON_INC(3); /* PATCHID:3275 */
+ 	    if (RAW != '"') {
+ 		xmlFatalErr(ctxt, XML_ERR_STRING_NOT_CLOSED, NULL);
+ 		xmlFree((xmlChar *) encoding);
+@@ -10424,6 +10471,7 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+ 	} else if (RAW == '\''){
+ 	    NEXT;
+ 	    encoding = xmlParseEncName(ctxt);
++IJON_INC(4); /* PATCHID:3113 */
+ 	    if (RAW != '\'') {
+ 		xmlFatalErr(ctxt, XML_ERR_STRING_NOT_CLOSED, NULL);
+ 		xmlFree((xmlChar *) encoding);
+@@ -10449,6 +10497,8 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+         if ((encoding != NULL) &&
+ 	    ((!xmlStrcasecmp(encoding, BAD_CAST "UTF-16")) ||
+ 	     (!xmlStrcasecmp(encoding, BAD_CAST "UTF16")))) {
++IJON_STRDIST((const char*)encoding, "UTF16"); /* PATCHID:2415 */
++IJON_STRDIST((const char*)encoding, "UTF-16"); /* PATCHID:1483 */
+ 	    /*
+ 	     * If no encoding was passed to the parser, that we are
+ 	     * using UTF-16 and no decoder is present i.e. the
+@@ -10464,6 +10514,7 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+ 	    if (ctxt->encoding != NULL)
+ 		xmlFree((xmlChar *) ctxt->encoding);
+ 	    ctxt->encoding = encoding;
++IJON_CTX(40); /* PATCHID:714 */
+ 	}
+ 	/*
+ 	 * UTF-8 encoding is handled natively
+@@ -10471,6 +10522,7 @@ xmlParseEncodingDecl(xmlParserCtxtPtr ctxt) {
+         else if ((encoding != NULL) &&
+ 	    ((!xmlStrcasecmp(encoding, BAD_CAST "UTF-8")) ||
+ 	     (!xmlStrcasecmp(encoding, BAD_CAST "UTF8")))) {
++IJON_STRDIST((const char*)encoding, "UTF-8"); /* PATCHID:628 */
+ 	    if (ctxt->encoding != NULL)
+ 		xmlFree((xmlChar *) ctxt->encoding);
+ 	    ctxt->encoding = encoding;
+diff --git a/valid.c b/valid.c
+index 7f4f6fab..93ffb6d9 100644
+--- a/valid.c
++++ b/valid.c
+@@ -1298,11 +1298,16 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+     int len;
+ 
+     if (content == NULL) return;
++IJON_SET((int)content->type); /* PATCHID:51273 */
++
++IJON_SET((int)content->type); /* PATCHID:53589 */
+     len = strlen(buf);
++IJON_MIN((unsigned long long)(size - len)); /* PATCHID:50719 */
+     if (size - len < 50) {
+ 	if ((size - len > 4) && (buf[len - 1] != '.'))
+ 	    strcat(buf, " ...");
+ 	return;
++IJON_SET((int)englob); /* PATCHID:53025 */
+     }
+     if (englob) strcat(buf, "(");
+     switch (content->type) {
+@@ -1316,6 +1321,7 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+ 	    if (content->prefix != NULL)
+                 qnameLen += xmlStrlen(content->prefix) + 1;
+ 	    if (size - len < qnameLen + 10) {
++IJON_MIN((unsigned long long)(size - len - qnameLen)); /* PATCHID:50229 */
+ 		strcat(buf, " ...");
+ 		return;
+ 	    }
+@@ -1352,6 +1358,7 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+ 	    else
+ 		xmlSnprintfElementContent(buf, size, content->c1, 0);
+ 	    len = strlen(buf);
++IJON_MIN((unsigned long long)(size - len)); /* PATCHID:49416 */
+ 	    if (size - len < 50) {
+ 		if ((size - len > 4) && (buf[len - 1] != '.'))
+ 		    strcat(buf, " ...");
+@@ -1372,6 +1379,7 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+ 	    else
+ 		xmlSnprintfElementContent(buf, size, content->c1, 0);
+ 	    len = strlen(buf);
++IJON_MIN((unsigned long long)(size - len)); /* PATCHID:48885 */
+ 	    if (size - len < 50) {
+ 		if ((size - len > 4) && (buf[len - 1] != '.'))
+ 		    strcat(buf, " ...");
+@@ -1390,11 +1398,13 @@ xmlSnprintfElementContent(char *buf, int size, xmlElementContentPtr content, int
+     if (size - strlen(buf) <= 2) return;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_SET((int)content->ocur); /* PATCHID:52218 */
+     MAGMA_LOG("%MAGMA_BUG%", size - strlen(buf) <= 2);
+ #endif
+     if (englob)
+         strcat(buf, ")");
+     switch (content->ocur) {
++IJON_SET((int)content->ocur); /* PATCHID:48750 */
+         case XML_ELEMENT_CONTENT_ONCE:
+ 	    break;
+         case XML_ELEMENT_CONTENT_OPT:
+@@ -4643,6 +4653,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+ 	    return(0);
+ 	}
+ 	if (ns->prefix != NULL) {
++IJON_SET((int)(ns->prefix != NULL)); /* PATCHID:28238 */
+ 	    attrDecl = xmlGetDtdQAttrDesc(doc->intSubset, fullname,
+ 		                          ns->prefix, BAD_CAST "xmlns");
+ 	    if ((attrDecl == NULL) && (doc->extSubset != NULL))
+@@ -4658,6 +4669,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+ 	if ((fullname != fn) && (fullname != elem->name))
+ 	    xmlFree(fullname);
+     }
++IJON_SET((int)(attrDecl != NULL)); /* PATCHID:27801 */
+     if (attrDecl == NULL) {
+ 	if (ns->prefix != NULL) {
+ 	    attrDecl = xmlGetDtdQAttrDesc(doc->intSubset, elem->name,
+@@ -4673,6 +4685,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+ 					     elem->name, BAD_CAST "xmlns");
+ 	}
+     }
++IJON_SET((int)(attrDecl != NULL)); /* PATCHID:27480 */
+ 
+ 
+     /* Validity Constraint: Attribute Value Type */
+@@ -4690,6 +4703,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+     }
+ 
+     val = xmlValidateAttributeValueInternal(doc, attrDecl->atype, value);
++IJON_SET((int)attrDecl->atype); /* PATCHID:26685 */
+     if (val == 0) {
+ 	if (ns->prefix != NULL) {
+ 	    xmlErrValidNode(ctxt, elem, XML_DTD_INVALID_DEFAULT,
+@@ -4734,6 +4748,7 @@ xmlNodePtr elem, const xmlChar *prefix, xmlNsPtr ns, const xmlChar *value) {
+         if (xmlAddID(ctxt, doc, value, (xmlAttrPtr) ns) == NULL)
+ 	    ret = 0;
+     }
++IJON_INC((int)ret); /* PATCHID:26501 */
+ 
+     if ((attrDecl->atype == XML_ATTRIBUTE_IDREF) ||
+ 	(attrDecl->atype == XML_ATTRIBUTE_IDREFS)) {
+diff --git a/xmlmemory.c b/xmlmemory.c
+index aa270467..ac301e3f 100644
+--- a/xmlmemory.c
++++ b/xmlmemory.c
+@@ -265,6 +265,7 @@ xmlMallocAtomicLoc(size_t size, const char * file, int line)
+     MAGMA_LOG("%MAGMA_BUG%", size > (MAX_SIZE_T - RESERVE_SIZE));
+ #endif
+ 
++IJON_SET((int)(size % 10000)); /* PATCHID:71357 */
+     p = (MEMHDR *) malloc(RESERVE_SIZE+size);
+ 
+     if (!p) {
+@@ -283,10 +284,12 @@ xmlMallocAtomicLoc(size_t size, const char * file, int line)
+     debugMemSize += size;
+     debugMemBlocks++;
+     if (debugMemSize > debugMaxMemSize) debugMaxMemSize = debugMemSize;
++IJON_MAX((unsigned long long)debugMemSize); /* PATCHID:70431 */
+ #ifdef MEM_LIST
+     debugmem_list_add(p);
+ #endif
+     xmlMutexUnlock(xmlMemMutex);
++IJON_INC((int)debugMemBlocks); /* PATCHID:69486 */
+ 
+ #ifdef DEBUG_MEMORY
+     xmlGenericError(xmlGenericErrorContext,
+@@ -296,6 +299,7 @@ xmlMallocAtomicLoc(size_t size, const char * file, int line)
+     if (xmlMemStopAtBlock == p->mh_number) xmlMallocBreakpoint();
+ 
+     ret = HDR_2_CLIENT(p);
++IJON_SET((int)((unsigned long long)ret % 1000)); /* PATCHID:68541 */
+ 
+     if (xmlMemTraceBlockAt == ret) {
+ 	xmlGenericError(xmlGenericErrorContext,
+@@ -352,6 +356,7 @@ xmlReallocLoc(void *ptr,size_t size, const char * file, int line)
+ 
+     p = CLIENT_2_HDR(ptr);
+     number = p->mh_number;
++IJON_SET((int)number); /* PATCHID:67928 */
+     if (xmlMemStopAtBlock == number) xmlMallocBreakpoint();
+     if (p->mh_tag != MEMTAG) {
+        Mem_Tag_Err(p);
+@@ -370,6 +375,7 @@ xmlReallocLoc(void *ptr,size_t size, const char * file, int line)
+     xmlMutexUnlock(xmlMemMutex);
+ 
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_CMP((unsigned long long)size, (unsigned long long)(MAX_SIZE_T - RESERVE_SIZE)); /* PATCHID:67877 */
+     if (size > (MAX_SIZE_T - RESERVE_SIZE)) {
+ 	xmlGenericError(xmlGenericErrorContext,
+ 		"xmlReallocLoc : Unsigned overflow\n");
+@@ -380,6 +386,7 @@ xmlReallocLoc(void *ptr,size_t size, const char * file, int line)
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("%MAGMA_BUG%", size > (MAX_SIZE_T - RESERVE_SIZE));
+ #endif
++IJON_DIST((long long)size, (long long)(MAX_SIZE_T - RESERVE_SIZE)); /* PATCHID:67101 */
+ 
+     tmp = (MEMHDR *) realloc(p,RESERVE_SIZE+size);
+     if (!tmp) {
+@@ -523,6 +530,7 @@ xmlMemStrdupLoc(const char *str, const char *file, int line)
+ {
+     char *s;
+     size_t size = strlen(str) + 1;
++IJON_MAX((unsigned long long) size); /* PATCHID:60769 */
+     MEMHDR *p;
+ 
+     if (!xmlMemInitialized) xmlInitMemory();
+@@ -530,6 +538,7 @@ xmlMemStrdupLoc(const char *str, const char *file, int line)
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     if (size > (MAX_SIZE_T - RESERVE_SIZE)) {
++IJON_CMP((unsigned long long) size, (unsigned long long) (MAX_SIZE_T - RESERVE_SIZE)); /* PATCHID:60548 */
+ 	xmlGenericError(xmlGenericErrorContext,
+ 		"xmlMemStrdupLoc : Unsigned overflow\n");
+ 	xmlMemoryDump();
+@@ -551,9 +560,12 @@ xmlMemStrdupLoc(const char *str, const char *file, int line)
+     p->mh_line = line;
+     xmlMutexLock(xmlMemMutex);
+     p->mh_number = ++block;
++IJON_INC((int) p->mh_number); /* PATCHID:59876 */
+     debugMemSize += size;
++IJON_MAX((unsigned long long) debugMemSize); /* PATCHID:58957 */
+     debugMemBlocks++;
+     if (debugMemSize > debugMaxMemSize) debugMaxMemSize = debugMemSize;
++IJON_MAX((unsigned long long) debugMaxMemSize); /* PATCHID:58505 */
+ #ifdef MEM_LIST
+     debugmem_list_add(p);
+ #endif
+diff --git a/xmlregexp.c b/xmlregexp.c
+index 1c058014..79e6e644 100644
+--- a/xmlregexp.c
++++ b/xmlregexp.c
+@@ -5090,9 +5090,11 @@ xmlFAParseCharRange(xmlRegParserCtxtPtr ctxt) {
+ 		return;
+ 	}
+ 	end = start;
++IJON_SET((int) start); /* PATCHID:19035 */
+         len = 1;
+     } else if ((cur != 0x5B) && (cur != 0x5D)) {
+         end = start = CUR_SCHAR(ctxt->cur, len);
++IJON_SET((int) start); /* PATCHID:18091 */
+     } else {
+ 	ERROR("Expecting a char range");
+ 	return;
+@@ -5106,6 +5108,7 @@ xmlFAParseCharRange(xmlRegParserCtxtPtr ctxt) {
+ 	return;
+     }
+     NEXTL(len);
++IJON_SET((int) start); /* PATCHID:17141 */
+     cur = CUR;
+     if ((cur != '-') || (NXT(1) == ']')) {
+         xmlRegAtomAddRange(ctxt, ctxt->atom, ctxt->neg,
+@@ -5125,13 +5128,16 @@ xmlFAParseCharRange(xmlRegParserCtxtPtr ctxt) {
+ 	    case '*': case '+': case '{': case '}': case '(': case ')':
+ 	    case '[': case ']':
+ 		end = cur; break;
++IJON_SET((int) end); /* PATCHID:16249 */
+ 	    default:
+ 		ERROR("Invalid escape value");
+ 		return;
+ 	}
+         len = 1;
++IJON_SET((int) end); /* PATCHID:15721 */
+     } else if ((cur != '\0') && (cur != 0x5B) && (cur != 0x5D)) {
+         end = CUR_SCHAR(ctxt->cur, len);
++IJON_SET((int) end); /* PATCHID:15205 */
+     } else {
+ 	ERROR("Expecting the end of a char range");
+ 	return;
+diff --git a/xmlstring.c b/xmlstring.c
+index 9b2d954a..555e7bd7 100644
+--- a/xmlstring.c
++++ b/xmlstring.c
+@@ -460,11 +460,15 @@ xmlStrncat(xmlChar *cur, const xmlChar *add, int len) {
+         return(xmlStrndup(add, len));
+ 
+     size = xmlStrlen(cur);
++IJON_CMP((unsigned long long)size, 0); /* PATCHID:66986 */
++IJON_MIN((unsigned long long)size); /* PATCHID:66961 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (size < 0)
+         return(NULL);
+ #endif
+     ret = (xmlChar *) xmlRealloc(cur, (size + len + 1) * sizeof(xmlChar));
++
++IJON_SET((int)(size + len + 1)); /* PATCHID:66028 */
+     if (ret == NULL) {
+         xmlErrMemory(NULL, NULL);
+         return(cur);
+@@ -504,16 +508,24 @@ xmlStrncatNew(const xmlChar *str1, const xmlChar *str2, int len) {
+             return(NULL);
+ #endif
+     }
++IJON_CMP((unsigned long long) len, (unsigned long long) -1); /* PATCHID:65092 */
++IJON_MIN((unsigned long long) len); /* PATCHID:64531 */
++IJON_SET((int) len); /* PATCHID:63514 */
+     if ((str2 == NULL) || (len == 0))
+         return(xmlStrdup(str1));
+     if (str1 == NULL)
+         return(xmlStrndup(str2, len));
+ 
+     size = xmlStrlen(str1);
++IJON_CMP((unsigned long long) size, (unsigned long long) -1); /* PATCHID:63370 */
++IJON_MIN((unsigned long long) size); /* PATCHID:62780 */
++IJON_SET((int) size); /* PATCHID:61767 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if (size < 0)
+         return(NULL);
+ #endif
++IJON_MIN((unsigned long long) (size + len)); /* PATCHID:61453 */
++IJON_SET((int) (size + len)); /* PATCHID:61277 */
+     ret = (xmlChar *) xmlMalloc((size + len + 1) * sizeof(xmlChar));
+     if (ret == NULL) {
+         xmlErrMemory(NULL, NULL);
+diff --git a/xzlib.c b/xzlib.c
+index 4846050e..25b15c21 100644
+--- a/xzlib.c
++++ b/xzlib.c
+@@ -552,6 +552,8 @@ xz_decomp(xz_statep state)
+         /* decompress and handle errors */
+ #ifdef LIBXML_ZLIB_ENABLED
+         if (state->how == GZIP) {
++IJON_SET((int) state->how); /* PATCHID:57550 */
++IJON_CTX(286); /* PATCHID:57509 */
+             state->zstrm.avail_in = (uInt) state->strm.avail_in;
+             state->zstrm.next_in = (Bytef *) state->strm.next_in;
+             state->zstrm.avail_out = (uInt) state->strm.avail_out;
+@@ -579,6 +581,10 @@ xz_decomp(xz_statep state)
+         } else                  /* state->how == LZMA */
+ #endif
+             ret = lzma_code(strm, action);
++IJON_CMP((unsigned long long) ret, (unsigned long long) LZMA_PROG_ERROR); /* PATCHID:56520 */
++IJON_CMP((unsigned long long) ret, (unsigned long long) LZMA_MEM_ERROR); /* PATCHID:56399 */
++IJON_CMP((unsigned long long) ret, (unsigned long long) LZMA_DATA_ERROR); /* PATCHID:55465 */
++IJON_SET((int) ret); /* PATCHID:55109 */
+         if (ret == LZMA_MEM_ERROR) {
+             xz_error(state, LZMA_MEM_ERROR, "out of memory");
+             return -1;
+@@ -603,6 +609,7 @@ xz_decomp(xz_statep state)
+             MAGMA_AND(ret != LZMA_OK, ret != LZMA_STREAM_END)));
+ #endif
+     } while (strm->avail_out && ret != LZMA_STREAM_END);
++IJON_INC((int) strm->avail_in); /* PATCHID:54574 */
+ 
+     /* update available output and crc check value */
+     state->have = had - strm->avail_out;

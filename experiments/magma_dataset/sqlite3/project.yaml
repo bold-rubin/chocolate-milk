@@ -1,0 +1,4 @@
+language: c
+shellphish_project_name: sqlite3
+shellphish_harness_paths:
+  - "sqlite3_fuzz"
