@@ -1,0 +1,11 @@
+exif_process_IFD_in_TIFF_impl
+exif_scan_thumbnail
+php_stream_url_wrap_http_ex
+zif_msgfmt_parse_message
+phar_verify_signature
+phar_parse_pharfile
+phar_parse_zipfile
+exif_offset_info_try_get
+exif_process_IFD_in_MAKERNOTE
+phar_detect_phar_fname_ext
+get_icu_disp_value_src_php

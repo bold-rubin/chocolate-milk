@@ -1,0 +1,206 @@
+diff --git a/png.c b/png.c
+index a656f7521..47967162b 100644
+--- a/png.c
++++ b/png.c
+@@ -10,7 +10,7 @@
+  * For conditions of distribution and use, see the disclaimer
+  * and license in png.h
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ /* Generate a compiler error if there is an old png.h in the search path. */
+@@ -475,6 +475,8 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 mask,
+ 
+    if (png_ptr == NULL || info_ptr == NULL)
+       return;
++IJON_SET((int)num); /* PATCHID:15909 */
++IJON_SET((int)mask); /* PATCHID:15685 */
+ 
+ #ifdef PNG_TEXT_SUPPORTED
+    /* Free text item num or (if num == -1) all text items */
+@@ -617,6 +619,9 @@ png_free_data(png_const_structrp png_ptr, png_inforp info_ptr, png_uint_32 mask,
+ 
+ #ifdef PNG_eXIf_SUPPORTED
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_SET((int)((mask & info_ptr->free_me & PNG_FREE_EXIF) == 0)); /* PATCHID:15256 */
++IJON_CMP((unsigned long long)(mask & info_ptr->free_me), (unsigned long long)PNG_FREE_EXIF); /* PATCHID:14556 */
++IJON_SET((int)(info_ptr->eXIf_buf != NULL)); /* PATCHID:14156 */
+    MAGMA_LOG("PNG006", MAGMA_AND(info_ptr->eXIf_buf != NULL, (mask & info_ptr->free_me & PNG_FREE_EXIF) == 0));
+ #endif
+    /* Free any eXIf entry */
+diff --git a/pngerror.c b/pngerror.c
+index 826585e6c..eb40a2425 100644
+--- a/pngerror.c
++++ b/pngerror.c
+@@ -15,7 +15,7 @@
+  * and use png_set_error_fn() to use those functions.  See the instructions
+  * at each function.
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ #if defined(PNG_READ_SUPPORTED) || defined(PNG_WRITE_SUPPORTED)
+@@ -942,16 +942,21 @@ png_safe_execute(png_imagep image_in, int (*function)(png_voidp), png_voidp arg)
+ 
+    /* Safely execute function(arg) with png_error returning to this function. */
+    saved_error_buf = image->opaque->error_buf;
++IJON_SET((int)image->flags); /* PATCHID:10625 */
+    result = setjmp(safe_jmpbuf) == 0;
+ 
+    if (result != 0)
+    {
++IJON_SET((int)result); /* PATCHID:10534 */
+ 
+       image->opaque->error_buf = safe_jmpbuf;
+       result = function(arg);
++IJON_SET((int)image->flags); /* PATCHID:10073 */
+    }
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_INC((int)((image->flags & PNG_IMAGE_FLAG_INVALID) != 0)); /* PATCHID:10035 */
++IJON_CMP((unsigned long long)image->flags, (unsigned long long)PNG_IMAGE_FLAG_INVALID); /* PATCHID:9516 */
+    MAGMA_LOG("PNG002", (image->flags & PNG_IMAGE_FLAG_INVALID) != 0);
+ #endif
+ 
+diff --git a/pngrtran.c b/pngrtran.c
+index f54d98f84..f36855988 100644
+--- a/pngrtran.c
++++ b/pngrtran.c
+@@ -15,7 +15,7 @@
+  * Transformations that are used in both reading and writing are
+  * in pngtrans.c.
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ #ifdef PNG_ARM_NEON_IMPLEMENTATION
+@@ -1946,6 +1946,7 @@ png_read_transform_info(png_structrp png_ptr, png_inforp info_ptr)
+    {
+       if (info_ptr->color_type == PNG_COLOR_TYPE_PALETTE)
+       {
++IJON_CTX((unsigned long long)393); /* PATCHID:8548 */
+          /* This check must match what actually happens in
+           * png_do_expand_palette; if it ever checks the tRNS chunk to see if
+           * it is all opaque we must do the same (at present it does not.)
+@@ -1959,6 +1960,7 @@ png_read_transform_info(png_structrp png_ptr, png_inforp info_ptr)
+          info_ptr->bit_depth = 8;
+          info_ptr->num_trans = 0;
+ 
++IJON_CMP((unsigned long long)png_ptr->palette, (unsigned long long)0); /* PATCHID:7549 */
+ #ifdef MAGMA_ENABLE_FIXES
+          if (png_ptr->palette == NULL)
+             png_error (png_ptr, "Palette is NULL in indexed image");
+diff --git a/pngrutil.c b/pngrutil.c
+index 8df1dc83d..7728c3576 100644
+--- a/pngrutil.c
++++ b/pngrutil.c
+@@ -13,7 +13,7 @@
+  * This file contains routines that are only called from within
+  * libpng itself during the course of reading an image.
+  */
+-
++#include <stdio.h>
+ #include "pngpriv.h"
+
+ #ifdef PNG_READ_SUPPORTED
+@@ -972,6 +972,7 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+    /* The cast is safe because 'length' is less than 3*PNG_MAX_PALETTE_LENGTH */
+    num = (int)length / 3;
++IJON_MAX((unsigned long long)num); /* PATCHID:13478 */
+ 
+    /* If the palette has 256 or fewer entries but is too large for the bit
+     * depth, we don't issue an error, to preserve the behavior of previous
+@@ -982,7 +983,9 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+       max_palette_length = (1 << png_ptr->bit_depth);
+    else
+       max_palette_length = PNG_MAX_PALETTE_LENGTH;
++IJON_SET((int)max_palette_length); /* PATCHID:12485 */
+ 
++IJON_DIST((long long)num, (long long)max_palette_length); /* PATCHID:11910 */
+ #ifdef MAGMA_ENABLE_FIXES
+    if (num > max_palette_length)
+       num = max_palette_length;
+@@ -990,6 +993,7 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+    MAGMA_LOG("PNG003", num > max_palette_length);
++IJON_CMP((unsigned long long)num, (unsigned long long)max_palette_length); /* PATCHID:11433 */
+ #endif
+ 
+ #ifdef PNG_POINTER_INDEXING_SUPPORTED
+@@ -3184,12 +3188,15 @@ png_check_chunk_length(png_const_structrp png_ptr, png_uint_32 length)
+          * (png_ptr->bit_depth > 8? 2: 1)
+          + 1
+          + (png_ptr->interlaced? 6: 0);
++IJON_DIST((long long)row_factor_l, (long long)4294967296ULL); /* PATCHID:6652 */
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
+       MAGMA_LOG("PNG001", row_factor_l == ((size_t)1 << (sizeof(png_uint_32) * 8)));
++IJON_CMP((unsigned long long)row_factor_l, (unsigned long long)4294967296ULL); /* PATCHID:6075 */
+ #endif
+ 
+       size_t row_factor = (png_uint_32)row_factor_l;
++IJON_SET((int)row_factor); /* PATCHID:5260 */
+ #endif
+       if (png_ptr->height > PNG_UINT_32_MAX/row_factor)
+          idat_limit = PNG_UINT_31_MAX;
+@@ -3225,6 +3232,7 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+    png_alloc_size_t row_width = png_ptr->width;
+ #else
+    png_uint_32 row_width = png_ptr->width;
++IJON_MAX((unsigned long long)row_width); /* PATCHID:4923 */
+ #endif
+    unsigned int pass = png_ptr->pass;
+    png_bytep end_ptr = 0;
+@@ -3475,8 +3483,10 @@ png_combine_row(png_const_structrp png_ptr, png_bytep dp, int display)
+             png_error(png_ptr, "invalid user transform pixel depth");
+ 
+          pixel_depth >>= 3; /* now in bytes */
++IJON_MAX((unsigned long long)pixel_depth); /* PATCHID:4146 */
+ 
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_DIST((long long)(row_width * pixel_depth), (long long)((u_int64_t)row_width * pixel_depth)); /* PATCHID:3844 */
+          MAGMA_LOG("PNG004", (row_width * pixel_depth) != (u_int64_t)row_width * pixel_depth);
+ #endif
+          row_width *= pixel_depth;
+@@ -4470,6 +4480,8 @@ png_read_start_row(png_structrp png_ptr)
+    }
+ 
+    max_pixel_depth = (unsigned int)png_ptr->pixel_depth;
++IJON_MAX((unsigned long long)max_pixel_depth); /* PATCHID:3704 */
++IJON_MAX((unsigned long long)png_ptr->width); /* PATCHID:2779 */
+ 
+    /* WARNING: * png_read_transform_info (pngrtran.c) performs a simpler set of
+     * calculations to calculate the final pixel depth, then
+@@ -4622,11 +4634,13 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED)
+     * for interlacing
+     */
+    row_bytes = ((png_ptr->width + 7) & ~((png_uint_32)7));
++IJON_SET((int)row_bytes); /* PATCHID:2514 */
+    /* Calculate the maximum bytes needed, adding a byte and a pixel
+     * for safety's sake
+     */
+    row_bytes = PNG_ROWBYTES(max_pixel_depth, row_bytes) +
+        1 + ((max_pixel_depth + 7) >> 3U);
++IJON_MAX((unsigned long long)row_bytes); /* PATCHID:2349 */
+ 
+ #if MAGMA_ENABLE_CANARIES
+     /* Since width is initially aligned on the next larger 8 pixels,
+@@ -4639,10 +4653,12 @@ defined(PNG_USER_TRANSFORM_PTR_SUPPORTED)
+      * 3 bits.
+      */
+    size_t row_bytes_check = row_bytes & ~((size_t)7);
++IJON_SET((int)row_bytes_check); /* PATCHID:1569 */
+     /* The input width resulted in an integer overflow, which could
+      * later cause a heap buffer overflow due to a bad allocation size
+      */
+    MAGMA_LOG("PNG005", row_bytes_check < ((png_ptr->width + 7) & ~((png_uint_32)7)));
++IJON_DIST((long long)row_bytes_check, (long long)((png_ptr->width + 7) & ~((png_uint_32)7))); /* PATCHID:688 */
+ #endif
+ 
+ #ifdef PNG_MAX_MALLOC_64K

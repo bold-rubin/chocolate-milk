@@ -1,0 +1,66 @@
+#!/bin/bash
+set -e
+set -x
+
+##
+# Pre-requirements:
+# - env FUZZER: path to fuzzer work dir
+# - env TARGET: path to target work dir
+# - env MAGMA: path to Magma support files
+# - env OUT: path to directory where artifacts are stored
+# - env CFLAGS and CXXFLAGS must be set to link against Magma instrumentation
+##
+
+export CC="$FUZZER/repo/afl-clang-fast"
+export CXX="$FUZZER/repo/afl-clang-fast++"
+export AS="llvm-as"
+export AFL_PATH="$FUZZER/repo/"
+
+# if [ -f "$TARGET/patches/aijon/aijon_allowlist.txt" ]; then
+#     export AFL_LLVM_ALLOWLIST="$TARGET/patches/aijon/aijon_allowlist.txt"
+# fi
+
+export LIBS="$LIBS -lc++ -lc++abi $FUZZER/repo/libAFLDriver.a"
+
+# AFL++'s driver is compiled against libc++
+export CFLAGS="$CFLAGS -include $FUZZER/repo/include/afl-ijon-min.h"
+export CXXFLAGS="$CXXFLAGS -stdlib=libc++ -include $FUZZER/repo/include/afl-ijon-min.h"
+
+# This should already exist
+ORIGINAL_TARGET="$TARGET-orig"
+if [ ! -d "$ORIGINAL_TARGET" ]; then
+    echo "Original target directory $ORIGINAL_TARGET does not exist!"
+    exit 1
+fi
+
+# Build the AFL-only instrumented version
+(
+    export OUT="$OUT/afl"
+    export LDFLAGS="$LDFLAGS -L$OUT"
+
+    "$MAGMA/build.sh"
+    "$TARGET/build.sh"
+)
+
+# Build the ORIGINAL_TARGET or
+# Build the cmplog instrumented version
+(
+    # unset AFL_LLVM_ALLOWLIST
+
+    export OUT="$OUT/afl-orig"
+    mkdir -p "$OUT"
+
+    # export OUT="$OUT/cmplog"
+
+    export LDFLAGS="$LDFLAGS -L$OUT"
+    # export CFLAGS="$CFLAGS -DMAGMA_DISABLE_CANARIES"
+
+    # export AFL_LLVM_CMPLOG=1
+
+    "$MAGMA/build.sh"
+    "$ORIGINAL_TARGET/build.sh"
+)
+
+# NOTE: We pass $OUT directly to the target build.sh script, since the artifact
+#       itself is the fuzz target. In the case of Angora, we might need to
+#       replace $OUT by $OUT/fast and $OUT/track, for instance.

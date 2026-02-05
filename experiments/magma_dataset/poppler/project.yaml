@@ -1,0 +1,4 @@
+language: c
+shellphish_project_name: poppler
+shellphish_harness_paths:
+  - "pdf_fuzzer"

@@ -1,0 +1,539 @@
+diff --git a/libtiff/tif_dir.c b/libtiff/tif_dir.c
+index 94823e2a..338c92f4 100644
+--- a/libtiff/tif_dir.c
++++ b/libtiff/tif_dir.c
+@@ -99,6 +99,7 @@ setExtraSamples(TIFF* tif, va_list ap, uint32_t* v)
+         static const char module[] = "setExtraSamples";
+ 
+ 	*v = (uint16_t) va_arg(ap, uint16_vap);
++IJON_SET((int)*v); /* PATCHID:47463 */
+ 	if ((uint16_t) *v > td->td_samplesperpixel)
+ 		return 0;
+ 	va = va_arg(ap, uint16_t*);
+@@ -131,6 +132,8 @@ setExtraSamples(TIFF* tif, va_list ap, uint32_t* v)
+         }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_DIST((long long)(td->td_samplesperpixel - td->td_extrasamples), (long long)1); /* PATCHID:46704 */
++IJON_INC((int)(td->td_transferfunction[0] != NULL)); /* PATCHID:46054 */
+         MAGMA_LOG("TIF012", MAGMA_AND(td->td_transferfunction[0] != NULL, MAGMA_AND(td->td_samplesperpixel - *v > 1, \
+             !(td->td_samplesperpixel - td->td_extrasamples > 1))));
+ #endif
+@@ -197,6 +200,7 @@ _TIFFVSetField(TIFF* tif, uint32_t tag, va_list ap)
+ 	}
+ 
+ 	switch (standard_tag) {
++IJON_CMP((unsigned long long) standard_tag, (unsigned long long) TIFFTAG_SAMPLESPERPIXEL); /* PATCHID:46050 */
+ 	case TIFFTAG_SUBFILETYPE:
+ 		td->td_subfiletype = (uint32_t) va_arg(ap, uint32_t);
+ 		break;
+@@ -272,10 +276,16 @@ _TIFFVSetField(TIFF* tif, uint32_t tag, va_list ap)
+ 		break;
+ 	case TIFFTAG_SAMPLESPERPIXEL:
+ 		v = (uint16_t) va_arg(ap, uint16_vap);
++IJON_SET((int) v); /* PATCHID:45934 */
+ 		if (v == 0)
+ 			goto badvalue;
+         if( v != td->td_samplesperpixel )
+         {
++IJON_MIN((unsigned long long) (td->td_samplesperpixel - td->td_extrasamples)); /* PATCHID:45827 */
++IJON_DIST((long long) (v - td->td_extrasamples), (long long) 2); /* PATCHID:45746 */
++IJON_MAX((unsigned long long) (td->td_transferfunction[0] != NULL ? 1 : 0)); /* PATCHID:44935 */
++IJON_MAX((unsigned long long) (td->td_smaxsamplevalue != NULL ? 1 : 0)); /* PATCHID:44284 */
++IJON_MAX((unsigned long long) (td->td_sminsamplevalue != NULL ? 1 : 0)); /* PATCHID:43847 */
+ #ifdef MAGMA_ENABLE_FIXES
+             /* See http://bugzilla.maptools.org/show_bug.cgi?id=2500 */
+             if( td->td_sminsamplevalue != NULL )
+diff --git a/libtiff/tif_dirread.c b/libtiff/tif_dirread.c
+index a6ff499e..ddbcad87 100644
+--- a/libtiff/tif_dirread.c
++++ b/libtiff/tif_dirread.c
+@@ -5924,6 +5924,7 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	uint32_t rowsperstrip;
+ 
+ 	bytecount = TIFFGetStrileByteCount(tif, 0);
++IJON_MAX((unsigned long long)bytecount); /* PATCHID:3250 */
+         /* On a newly created file, just re-opened to be filled, we */
+         /* don't want strip chop to trigger as it is going to cause issues */
+         /* later ( StripOffsets and StripByteCounts improperly filled) . */
+@@ -5937,6 +5938,7 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	else
+ 		rowblock = 1;
+ 	rowblockbytes = TIFFVTileSize64(tif, rowblock);
++IJON_SET((unsigned long long)rowblockbytes); /* PATCHID:2243 */
+ 	/*
+ 	 * Make the rows hold at least one scanline, but fill specified amount
+ 	 * of data if possible.
+@@ -5944,10 +5946,12 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+ 	if (rowblockbytes > STRIP_SIZE_DEFAULT) {
+ 		stripbytes = rowblockbytes;
+ 		rowsperstrip = rowblock;
++IJON_SET((int)rowsperstrip); /* PATCHID:1492 */
+ 	} else if (rowblockbytes > 0 ) {
+ 		uint32_t rowblocksperstrip;
+ 		rowblocksperstrip = (uint32_t) (STRIP_SIZE_DEFAULT / rowblockbytes);
+ 		rowsperstrip = rowblocksperstrip * rowblock;
++IJON_SET((int)rowsperstrip); /* PATCHID:1066 */
+ 		stripbytes = rowblocksperstrip * rowblockbytes;
+ 	}
+ 	else
+@@ -5967,9 +5971,11 @@ ChopUpSingleUncompressedStrip(TIFF* tif)
+         if ((nstrips64==0)||(nstrips64>0xFFFFFFFF)) /* something is wonky, do nothing. */
+             return;
+         nstrips = (uint32_t)nstrips64;
++IJON_MAX((unsigned long long)nstrips); /* PATCHID:233 */
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+         MAGMA_LOG("TIF007", nstrips > TIFFhowmany_32(td->td_imagelength, rowsperstrip));
++IJON_CTX(209); /* PATCHID:210 */
+ #endif
+         /* If we are going to allocate a lot of memory, make sure that the */
+         /* file is as big as needed */
+diff --git a/libtiff/tif_dirwrite.c b/libtiff/tif_dirwrite.c
+index 1e2a788e..476a17a5 100644
+--- a/libtiff/tif_dirwrite.c
++++ b/libtiff/tif_dirwrite.c
+@@ -2091,6 +2091,8 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 	}
+ 	m=(1<<tif->tif_dir.td_bitspersample);
+ 	n=tif->tif_dir.td_samplesperpixel-tif->tif_dir.td_extrasamples;
++IJON_SET((int)m); /* PATCHID:6239 */
++IJON_SET((int)n); /* PATCHID:5816 */
+ 	/*
+ 	 * Check if the table can be written as a single column,
+ 	 * or if it must be written as 3 columns.  Note that we
+@@ -2099,6 +2101,7 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 	 */
+ 	if (n>3)
+ 		n=3;
++IJON_INC((int)n); /* PATCHID:5186 */
+ 	if (n==3)
+ 	{
+ #ifdef MAGMA_ENABLE_CANARIES
+@@ -2111,6 +2114,7 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 		if (!_TIFFmemcmp(tif->tif_dir.td_transferfunction[0],tif->tif_dir.td_transferfunction[2],m*sizeof(uint16_t)))
+ #endif
+ 			n=2;
++IJON_INC((int)n); /* PATCHID:4907 */
+ 	}
+ 	if (n==2)
+ 	{
+@@ -2124,9 +2128,11 @@ TIFFWriteDirectoryTagTransferfunction(TIFF* tif, uint32_t* ndir, TIFFDirEntry* d
+ 		if (!_TIFFmemcmp(tif->tif_dir.td_transferfunction[0],tif->tif_dir.td_transferfunction[1],m*sizeof(uint16_t)))
+ #endif
+ 			n=1;
++IJON_INC((int)n); /* PATCHID:4302 */
+ 	}
+ 	if (n==0)
+ 		n=1;
++IJON_INC((int)n); /* PATCHID:3640 */
+ 	o=_TIFFmalloc(n*m*sizeof(uint16_t));
+ 	if (o==NULL)
+ 	{
+diff --git a/libtiff/tif_luv.c b/libtiff/tif_luv.c
+index 552c7f4d..7d5d5eea 100644
+--- a/libtiff/tif_luv.c
++++ b/libtiff/tif_luv.c
+@@ -1558,6 +1558,8 @@ LogLuvClose(TIFF* tif)
+ 	TIFFDirectory *td = &tif->tif_dir;
+ 
+ 	assert(sp != 0);
++IJON_SET((int) sp->encoder_state); /* PATCHID:6877 */
++IJON_CMP((unsigned long long) sp->encoder_state, 0); /* PATCHID:6613 */
+ 	/*
+ 	 * For consistency, we always want to write out the same
+ 	 * bitspersample and sampleformat for our TIFF file,
+diff --git a/libtiff/tif_lzw.c b/libtiff/tif_lzw.c
+index fe25ef9b..b47c92c8 100644
+--- a/libtiff/tif_lzw.c
++++ b/libtiff/tif_lzw.c
+@@ -716,6 +716,7 @@ LZWDecodeCompat(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 		}
+ 		oldcodep = codep;
+ 		if (code >= 256) {
++IJON_INC((int)(code >= 256)); /* PATCHID:22648 */
+ 			/*
+ 			 * Code maps to a string, copy string
+ 			 * value to output (written in reverse).
+@@ -728,6 +729,7 @@ LZWDecodeCompat(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 				return (0);
+ 			}
+ 			if (codep->length > occ) {
++IJON_MAX((unsigned long long)codep->length); /* PATCHID:22127 */
+ 				/*
+ 				 * String is too long for decode buffer,
+ 				 * locate portion that will fit, copy to
+@@ -747,12 +749,15 @@ LZWDecodeCompat(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 				break;
+ 			}
+ 			len = codep->length;
++IJON_SET((int)len); /* PATCHID:21232 */
+ 			tp = op + len;
++IJON_DIST((long long)tp, (long long)op); /* PATCHID:21163 */
+ 			do {
+ #ifdef MAGMA_ENABLE_CANARIES
+ 				MAGMA_LOG("TIF010", tp <= op); // or use == instead of <= so the bug is reported once only
+ #endif
+ 				*--tp = codep->value;
++IJON_MIN((unsigned long long)((tp > op) ? (tp - op) : 0)); /* PATCHID:21073 */
+ 				codep = codep->next;
+ #ifdef MAGMA_ENABLE_FIXES
+ 			} while (codep && tp > op);
+diff --git a/libtiff/tif_next.c b/libtiff/tif_next.c
+index 241700e8..905e8184 100644
+--- a/libtiff/tif_next.c
++++ b/libtiff/tif_next.c
+@@ -73,6 +73,8 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ 		n = *bp++;
+ 		cc--;
+ 		switch (n) {
++IJON_CMP((unsigned long long)n, (unsigned long long)0x40); /* PATCHID:52604 */
++IJON_CMP((unsigned long long)n, (unsigned long long)0x80); /* PATCHID:52422 */
+ 		case LITERALROW:
+ 			/*
+ 			 * The entire scanline is given as literal values.
+@@ -83,6 +85,7 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ 			bp += scanline;
+ 			cc -= scanline;
+ 			break;
++IJON_SET(1); /* PATCHID:51842 */
+ 		case LITERALSPAN: {
+ 			tmsize_t off;
+ 			/*
+@@ -99,6 +102,7 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ 			bp += 4+n;
+ 			cc -= 4+n;
+ 			break;
++IJON_SET(2); /* PATCHID:50849 */
+ 		}
+ 		default: {
+ 			uint32_t npixels = 0, grey;
+@@ -114,8 +118,10 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ 			 * <color><npixels> until we've filled the scanline.
+ 			 */
+ 			op = row;
++IJON_SET(3); /* PATCHID:50257 */
+ 			for (;;) {
+ 				grey = (uint32_t)((n >> 6) & 0x3);
++IJON_MAX((unsigned long long)n); /* PATCHID:49410 */
+ 				n &= 0x3f;
+ 				/*
+ 				 * Ensure the run does not exceed the scanline
+@@ -123,6 +129,7 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+ 				 * issue.
+ 				 */
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_DIST((long long)op_offset, (long long)scanline); /* PATCHID:48621 */
+ 				while (n-- > 0 && npixels < imagewidth && op_offset < scanline)
+ #else
+                 while (n-- > 0 && npixels < imagewidth)
+@@ -132,6 +139,8 @@ NeXTDecode(TIFF* tif, uint8_t* buf, tmsize_t occ, uint16_t s)
+                     MAGMA_LOG("TIF008", op_offset >= scanline);
+ #endif
+ 					SETPIXEL(op, grey);
++IJON_INC((int)npixels); /* PATCHID:48464 */
++IJON_INC((int)op_offset); /* PATCHID:48224 */
+                 }
+ 				if (npixels >= imagewidth)
+ 					break;
+diff --git a/libtiff/tif_ojpeg.c b/libtiff/tif_ojpeg.c
+index afa889fe..91a3b8b6 100644
+--- a/libtiff/tif_ojpeg.c
++++ b/libtiff/tif_ojpeg.c
+@@ -789,6 +789,8 @@ OJPEGDecode(TIFF* tif, uint8_t* buf, tmsize_t cc, uint16_t s)
+ {
+         static const char module[]="OJPEGDecode";
+ 	OJPEGState* sp=(OJPEGState*)tif->tif_data;
++IJON_CMP((unsigned long long)sp->decoder_ok, 0); /* PATCHID:9792 */
++IJON_SET((int)sp->decoder_ok); /* PATCHID:9351 */
+ 	(void)s;
+ #ifdef MAGMA_ENABLE_FIXES
+         if( !sp->decoder_ok )
+@@ -803,6 +805,7 @@ OJPEGDecode(TIFF* tif, uint8_t* buf, tmsize_t cc, uint16_t s)
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("TIF004", sp->decoder_ok == 0);
++IJON_INC((int)(sp->decoder_ok == 0)); /* PATCHID:9238 */
+ #endif
+ 	if (sp->libjpeg_jpeg_query_style==0)
+ 	{
+diff --git a/libtiff/tif_pixarlog.c b/libtiff/tif_pixarlog.c
+index ea5691e3..9f677f0e 100644
+--- a/libtiff/tif_pixarlog.c
++++ b/libtiff/tif_pixarlog.c
+@@ -778,6 +778,7 @@ PixarLogDecode(TIFF* tif, uint8_t* op, tmsize_t occ, uint16_t s)
+ 			td->td_bitspersample);
+ 		return 0;
+ 	}
++IJON_SET((int)sp->user_datafmt); /* PATCHID:12104 */
+ 
+ 	llen = sp->stride * td->td_imagewidth;
+ 
+@@ -793,11 +794,14 @@ PixarLogDecode(TIFF* tif, uint8_t* op, tmsize_t occ, uint16_t s)
+ 	    to deal with 8byte memory sizes, though this code will respond
+ 	    appropriately even before we simplify it */
+ 	sp->stream.avail_out = (uInt) (nsamples * sizeof(uint16_t));
++IJON_MAX((unsigned long long)sp->stream.avail_out); /* PATCHID:11509 */
+ 	if (sp->stream.avail_out != nsamples * sizeof(uint16_t))
+ 	{
+ 		TIFFErrorExt(tif->tif_clientdata, module, "ZLib cannot deal with buffers this size");
+ 		return (0);
+ 	}
++IJON_DIST((long long)sp->stream.avail_out, (long long)sp->tbuf_size); /* PATCHID:11284 */
++IJON_CMP((unsigned long long)sp->stream.avail_out, (unsigned long long)sp->tbuf_size); /* PATCHID:10633 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 	/* Check that we will not fill more than what was allocated */
+ 	if ((tmsize_t)sp->stream.avail_out > sp->tbuf_size)
+@@ -1258,6 +1262,9 @@ PixarLogClose(TIFF* tif)
+ 	TIFFDirectory *td = &tif->tif_dir;
+ 
+ 	assert(sp != 0);
++IJON_MIN((unsigned long long)(sp->state & PLSTATE_INIT)); /* PATCHID:9025 */
++IJON_CMP((unsigned long long)(sp->state & PLSTATE_INIT), (unsigned long long)0); /* PATCHID:8249 */
++IJON_SET((int)sp->state); /* PATCHID:7587 */
+ 	/* In a really sneaky (and really incorrect, and untruthful, and
+ 	 * troublesome, and error-prone) maneuver that completely goes against
+ 	 * the spirit of TIFF, and breaks TIFF, on close, we covertly
+diff --git a/libtiff/tif_predict.c b/libtiff/tif_predict.c
+index 2cf6b027..b71604a7 100644
+--- a/libtiff/tif_predict.c
++++ b/libtiff/tif_predict.c
+@@ -280,8 +280,10 @@ static int
+ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ {
+ 	tmsize_t stride = PredictorState(tif)->stride;
++IJON_SET((int)stride); /* PATCHID:39888 */
+ 
+ 	unsigned char* cp = (unsigned char*) cp0;
++IJON_MAX((unsigned long long)cc); /* PATCHID:39097 */
+ #ifdef MAGMA_ENABLE_FIXES
+     if((cc%stride)!=0)
+     {
+@@ -292,6 +294,7 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("TIF001", (cc%stride)!=0);
++IJON_CMP((unsigned long long)(cc % stride), (unsigned long long)0); /* PATCHID:38740 */
+ #endif
+ 
+ 	if (cc > stride) {
+@@ -299,6 +302,7 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 		 * Pipeline the most common cases.
+ 		 */
+ 		if (stride == 3)  {
++IJON_CTX((unsigned long long)182); /* PATCHID:37878 */
+ 			unsigned int cr = cp[0];
+ 			unsigned int cg = cp[1];
+ 			unsigned int cb = cp[2];
+@@ -312,6 +316,7 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 				cp += 3;
+ 			}
+ 		} else if (stride == 4)  {
++IJON_CTX((unsigned long long)197); /* PATCHID:37448 */
+ 			unsigned int cr = cp[0];
+ 			unsigned int cg = cp[1];
+ 			unsigned int cb = cp[2];
+@@ -327,6 +332,7 @@ horAcc8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 				cp += 4;
+ 			}
+ 		} else  {
++IJON_CTX((unsigned long long)357); /* PATCHID:36662 */
+ 			cc -= stride;
+ 			do {
+ 				REPEAT4(stride, cp[stride] =
+@@ -353,8 +359,12 @@ static int
+ horAcc16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ {
+ 	tmsize_t stride = PredictorState(tif)->stride;
++IJON_SET((int)stride); /* PATCHID:36187 */
+ 	uint16_t* wp = (uint16_t*) cp0;
+ 	tmsize_t wc = cc / 2;
++IJON_CMP((unsigned long long)(cc % (2 * stride)), 0); /* PATCHID:35639 */
++IJON_MIN((unsigned long long)(cc % (2 * stride))); /* PATCHID:35566 */
++IJON_SET((int)(cc % (2 * stride))); /* PATCHID:35026 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     if((cc%(2*stride))!=0)
+@@ -369,6 +379,7 @@ horAcc16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ #endif
+ 
+ 	if (wc > stride) {
++IJON_MAX((unsigned long long)wc); /* PATCHID:34958 */
+ 		wc -= stride;
+ 		do {
+ 			REPEAT4(stride, wp[stride] = (uint16_t)(((unsigned int)wp[stride] + (unsigned int)wp[0]) & 0xffff); wp++)
+@@ -393,6 +404,11 @@ static int
+ horAcc32(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ {
+ 	tmsize_t stride = PredictorState(tif)->stride;
++IJON_MAX((unsigned long long)stride); /* PATCHID:34565 */
++IJON_MAX((unsigned long long)cc); /* PATCHID:33803 */
++IJON_CMP((unsigned long long)(cc % (4 * stride)), 0); /* PATCHID:33488 */
++IJON_MIN((unsigned long long)(cc % (4 * stride))); /* PATCHID:32991 */
++IJON_SET((int)(cc % (4 * stride))); /* PATCHID:32078 */
+ 	uint32_t* wp = (uint32_t*) cp0;
+ 	tmsize_t wc = cc / 4;
+ 
+@@ -427,7 +443,9 @@ fpAcc(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	tmsize_t stride = PredictorState(tif)->stride;
+ 	uint32_t bps = tif->tif_dir.td_bitspersample / 8;
+ 	tmsize_t wc = cc / bps;
++IJON_SET((int)bps); /* PATCHID:31950 */
+ 	tmsize_t count = cc;
++IJON_SET((int)wc); /* PATCHID:31668 */
+ 	uint8_t *cp = (uint8_t *) cp0;
+ 	uint8_t *tmp;
+ 
+@@ -441,6 +459,9 @@ fpAcc(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("TIF001", (cc%(bps*stride))!=0);
++IJON_SET((int)(cc % (bps * stride))); /* PATCHID:30841 */
++IJON_MIN((unsigned long long)(cc % (bps * stride))); /* PATCHID:30244 */
++IJON_CMP((unsigned long long)(cc % (bps * stride)), (unsigned long long)0); /* PATCHID:29972 */
+ #endif
+ 
+     tmp = (uint8_t *)_TIFFmalloc(cc);
+@@ -504,8 +525,13 @@ PredictorDecodeTile(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ 	assert(sp->decodetile != NULL);
+ 
+ 	if ((*sp->decodetile)(tif, op0, occ0, s)) {
++IJON_CTX(420); /* PATCHID:26831 */
+ 		tmsize_t rowsize = sp->rowsize;
+ 		assert(rowsize > 0);
++IJON_MIN((unsigned long long)(occ0 % rowsize)); /* PATCHID:25900 */
++IJON_SET((int)(occ0 % rowsize)); /* PATCHID:25290 */
++IJON_CMP((unsigned long long)occ0, (unsigned long long)rowsize); /* PATCHID:24571 */
++IJON_SET((int)rowsize); /* PATCHID:24306 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+ 		if((occ0%rowsize) !=0)
+@@ -520,6 +546,7 @@ PredictorDecodeTile(TIFF* tif, uint8_t* op0, tmsize_t occ0, uint16_t s)
+ #endif
+ 
+ 		assert(sp->decodepfunc != NULL);
++IJON_DIST((long long)occ0, (long long)rowsize); /* PATCHID:24159 */
+ 		while (occ0 > 0) {
+ 			if( !(*sp->decodepfunc)(tif, op0, rowsize) )
+                 return 0;
+@@ -537,7 +564,10 @@ horDiff8(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ {
+ 	TIFFPredictorState* sp = PredictorState(tif);
+ 	tmsize_t stride = sp->stride;
++IJON_SET((int)stride); /* PATCHID:23532 */
+ 	unsigned char* cp = (unsigned char*) cp0;
++IJON_CMP((unsigned long long)cc, (unsigned long long)stride); /* PATCHID:23346 */
++IJON_SET((int)(cc % stride)); /* PATCHID:23214 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     if((cc%stride)!=0)
+@@ -596,8 +626,11 @@ horDiff16(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ {
+ 	TIFFPredictorState* sp = PredictorState(tif);
+ 	tmsize_t stride = sp->stride;
++IJON_SET((int)stride); /* PATCHID:20370 */
+ 	uint16_t *wp = (uint16_t*) cp0;
+ 	tmsize_t wc = cc/2;
++IJON_SET((int)wc); /* PATCHID:19478 */
++IJON_SET((int)cc); /* PATCHID:18963 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     if((cc%(2*stride))!=0)
+@@ -641,8 +674,13 @@ horDiff32(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ {
+ 	TIFFPredictorState* sp = PredictorState(tif);
+ 	tmsize_t stride = sp->stride;
++IJON_SET((int)stride); /* PATCHID:18932 */
+ 	uint32_t *wp = (uint32_t*) cp0;
++IJON_SET((int)cc); /* PATCHID:18419 */
+ 	tmsize_t wc = cc/4;
++IJON_MAX((unsigned long long)(cc%(4*stride))); /* PATCHID:17628 */
++IJON_SET((int)(cc%(4*stride))); /* PATCHID:17031 */
++IJON_CMP((unsigned long long)(cc%(4*stride)), (unsigned long long)0); /* PATCHID:16819 */
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+     if((cc%(4*stride))!=0)
+@@ -690,6 +728,9 @@ fpDiff(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+ 	tmsize_t stride = PredictorState(tif)->stride;
+ 	uint32_t bps = tif->tif_dir.td_bitspersample / 8;
+ 	tmsize_t wc = cc / bps;
++IJON_SET((int)(bps * stride)); /* PATCHID:16339 */
++IJON_SET((int)stride); /* PATCHID:16020 */
++IJON_SET((int)bps); /* PATCHID:15310 */
+ 	tmsize_t count;
+ 	uint8_t *cp = (uint8_t *) cp0;
+ 	uint8_t *tmp;
+@@ -703,6 +744,9 @@ fpDiff(TIFF* tif, uint8_t* cp0, tmsize_t cc)
+     }
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++IJON_MIN((unsigned long long)(bps * stride - (cc % (bps * stride)))); /* PATCHID:14564 */
++IJON_CMP((unsigned long long)(cc % (bps * stride)), (unsigned long long)1); /* PATCHID:13567 */
++IJON_SET((int)(cc % (bps * stride))); /* PATCHID:12988 */
+     MAGMA_LOG("TIF001", (cc%(bps*stride))!=0);
+ #endif
+ 
+@@ -776,6 +820,9 @@ PredictorEncodeTile(TIFF* tif, uint8_t* bp0, tmsize_t cc0, uint16_t s)
+         bp = working_copy;
+ 
+ 	rowsize = sp->rowsize;
++IJON_MAX((unsigned long long)(cc0 % rowsize)); /* PATCHID:12967 */
++IJON_CMP((unsigned long long)(cc0 % rowsize), (unsigned long long)0); /* PATCHID:12700 */
++IJON_SET((int)(cc0 % rowsize)); /* PATCHID:12415 */
+ 	assert(rowsize > 0);
+ 
+ #ifdef MAGMA_ENABLE_FIXES
+diff --git a/libtiff/tif_print.c b/libtiff/tif_print.c
+index e5ee247f..851af37b 100644
+--- a/libtiff/tif_print.c
++++ b/libtiff/tif_print.c
+@@ -533,6 +533,7 @@ TIFFPrintDirectory(TIFF* tif, FILE* fd, long flags)
+ 	if (TIFFFieldSet(tif,FIELD_TRANSFERFUNCTION)) {
+ 		fprintf(fd, "  Transfer Function: ");
+ 		if (flags & TIFFPRINT_CURVES) {
++IJON_SET((int)(flags & TIFFPRINT_CURVES)); /* PATCHID:43558 */
+ 			fprintf(fd, "\n");
+ 			n = 1L<<td->td_bitspersample;
+ 			for (l = 0; l < n; l++) {
+@@ -540,13 +541,20 @@ TIFFPrintDirectory(TIFF* tif, FILE* fd, long flags)
+ 				fprintf(fd, "    %2ld: %5"PRIu16,
+ 				    l, td->td_transferfunction[0][l]);
+ #ifdef MAGMA_ENABLE_FIXES
++IJON_SET((int)td->td_samplesperpixel); /* PATCHID:42853 */
++IJON_MAX((unsigned long long)td->td_samplesperpixel); /* PATCHID:42271 */
+ 				for (i = 1; i < td->td_samplesperpixel - td->td_extrasamples && i < 3; i++)
+ #else
+ 				for (i = 1; i < td->td_samplesperpixel; i++)
+ #endif
+ 				{
++IJON_MAX((unsigned long long)i); /* PATCHID:41658 */
++IJON_SET((int)i); /* PATCHID:41188 */
++IJON_INC((int)td->td_samplesperpixel); /* PATCHID:40510 */
+ #ifdef MAGMA_ENABLE_CANARIES
+ 					MAGMA_LOG("TIF011", MAGMA_OR(i == sizeof(td->td_transferfunction) / sizeof(*td->td_transferfunction), i == (td->td_samplesperpixel - td->td_extrasamples)));
++IJON_CMP((unsigned long long)i, (unsigned long long)(td->td_samplesperpixel - td->td_extrasamples)); /* PATCHID:40448 */
++IJON_CMP((unsigned long long)i, (unsigned long long)3); /* PATCHID:40199 */
+ #endif
+ 					fprintf(fd, " %5"PRIu16,
+ 					    td->td_transferfunction[i][l]);
+diff --git a/libtiff/tif_read.c b/libtiff/tif_read.c
+index a0f87c22..82178a7e 100644
+--- a/libtiff/tif_read.c
++++ b/libtiff/tif_read.c
+@@ -482,12 +482,16 @@ static tmsize_t TIFFReadEncodedStripGetStripSize(TIFF* tif, uint32_t strip, uint
+ 	}
+ 
+ 	rowsperstrip=td->td_rowsperstrip;
++IJON_MIN((unsigned long long)td->td_imagelength); /* PATCHID:29165 */
+ 	if (rowsperstrip>td->td_imagelength)
+ 		rowsperstrip=td->td_imagelength;
++IJON_MAX((unsigned long long)rowsperstrip); /* PATCHID:28445 */
+ #ifdef MAGMA_ENABLE_FIXES
+ 	stripsperplane= TIFFhowmany_32_maxuint_compat(td->td_imagelength, rowsperstrip);
+ #else
+     stripsperplane=((td->td_imagelength+rowsperstrip-1)/rowsperstrip);
++IJON_CMP((unsigned long long)stripsperplane, (unsigned long long)0); /* PATCHID:28159 */
++IJON_MIN((unsigned long long)stripsperplane); /* PATCHID:27167 */
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
+     MAGMA_LOG("TIF003", stripsperplane == 0);

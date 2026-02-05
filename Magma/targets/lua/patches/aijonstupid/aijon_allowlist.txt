@@ -1,0 +1,4 @@
+changedline
+io_popen
+findvararg
+luaG_traceexec

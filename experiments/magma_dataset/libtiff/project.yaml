@@ -1,0 +1,4 @@
+language: c
+shellphish_project_name: libtiff
+shellphish_harness_paths:
+  - "tiff_read_rgba_fuzzer"

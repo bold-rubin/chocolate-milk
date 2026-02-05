@@ -1,0 +1,4 @@
+language: c
+shellphish_project_name: lua
+shellphish_harness_paths:
+  - "lua"

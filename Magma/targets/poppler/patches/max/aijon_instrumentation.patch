@@ -1,0 +1,15 @@
+diff --git a/poppler/JBIG2Stream.cc b/poppler/JBIG2Stream.cc
+index a2cffe99..e892a00d 100644
+--- a/poppler/JBIG2Stream.cc
++++ b/poppler/JBIG2Stream.cc
+@@ -813,6 +813,10 @@ void JBIG2Bitmap::combine(JBIG2Bitmap *bitmap, int x, int y, unsigned int combOp
+             continue;
+ #endif
+ #ifdef MAGMA_ENABLE_CANARIES
++
++
++IJON_MAX((unsigned long long)(y + yy)); /* PATCHID:34437 */
++
+         MAGMA_LOG("PDF019", MAGMA_OR(y + yy >= h, y + yy < 0));
+ #endif
+ 

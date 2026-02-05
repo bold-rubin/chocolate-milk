@@ -1,0 +1,660 @@
+diff --git a/crypto/asn1/a_d2i_fp.c b/crypto/asn1/a_d2i_fp.c
+index e8602053f9..a89545a0ba 100644
+--- a/crypto/asn1/a_d2i_fp.c
++++ b/crypto/asn1/a_d2i_fp.c
+@@ -188,9 +188,12 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
+             /* suck in slen bytes of data */
+             want = slen;
+             if (want > (len - off)) {
+-                size_t chunk_max = ASN1_CHUNK_INITIAL_SIZE;
+-
+                 want -= (len - off);
++#ifdef MAGMA_ENABLE_FIXES
++                size_t chunk_max = ASN1_CHUNK_INITIAL_SIZE;
++#else
++                size_t chunk_max = want;
++#endif
+                 if (want > INT_MAX /* BIO_read takes an int length */  ||
+                     len + want < len) {
+                     ERR_raise(ERR_LIB_ASN1, ASN1_R_TOO_LONG);
+@@ -212,6 +215,16 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
+                     want -= chunk;
+                     while (chunk > 0) {
+                         i = BIO_read(in, &(b->data[len]), chunk);
++#ifdef MAGMA_ENABLE_CANARIES
++                        /**
++                         * An EOF is encountered before the requested/allocated
++                         * amount of data was received.
++                         * When the fix above is disabled, the allocated buffer
++                         * is resized initially to the reported length, which
++                         * could result in temporary memory exhaustion.
++                         */
++                        MAGMA_LOG("SSL003", i <= 0);
++#endif
+                         if (i <= 0) {
+                             ERR_raise(ERR_LIB_ASN1, ASN1_R_NOT_ENOUGH_DATA);
+                             goto err;
+diff --git a/crypto/asn1/a_int.c b/crypto/asn1/a_int.c
+index 19e41ec73e..adf68081b2 100644
+--- a/crypto/asn1/a_int.c
++++ b/crypto/asn1/a_int.c
+@@ -139,7 +139,50 @@ static size_t i2c_ibuf(const unsigned char *b, size_t blen, int neg,
+     *p = pb;
+     p += pad;       /* yes, p[0] can be written twice, but it's little
+                      * price to pay for eliminated branches */
++#ifdef MAGMA_ENABLE_FIXES
+     twos_complement(p, b, blen, pb);
++#else
++    if (blen == 0)
++        *(p++) = 0;
++    else if (!neg)
++        memcpy(p, b, (unsigned int)blen);
++    else {
++        /* Begin at the end of the encoding */
++        const unsigned char *n = b + blen - 1;
++        p += blen - 1;
++        i = blen;
++
++        /**
++         * The representation of a negative zero is just all zeros. This routine
++         * tries to optimize 2's complement by skipping all trailing zeros,
++         * since trailing zeros are convserved by 2's complement. However, a
++         * negative zero number is all trailing zeros. Thus, the routine will
++         * underflow trying to skip them.
++         */
++
++        /* Copy zeros to destination as long as source is zero */
++        while (!*n) {
++            *(p--) = 0;
++            n--;
++            i--;
++#ifdef MAGMA_ENABLE_CANARIES
++            /**
++             * The value of `i` determines how many more iterations this loop
++             * can perform before underflowing. Once `i` reaches zero, the next
++             * iteration will result in dereferencing `n` outside the bounds of
++             * `b`.
++             */
++            MAGMA_LOG("SSL001", i == 0);
++#endif
++        }
++        /* Complement and increment next octet */
++        *(p--) = ((*(n--)) ^ 0xff) + 1;
++        i--;
++        /* Complement any octets left */
++        for (; i > 0; i--)
++            *(p--) = *(n--) ^ 0xff;
++    }
++#endif
+ 
+     *pp += ret;
+     return ret;
+diff --git a/crypto/asn1/a_type.c b/crypto/asn1/a_type.c
+index 6b638bd80c..17550ee229 100644
+--- a/crypto/asn1/a_type.c
++++ b/crypto/asn1/a_type.c
+@@ -71,12 +71,18 @@ int ASN1_TYPE_cmp(const ASN1_TYPE *a, const ASN1_TYPE *b)
+     case V_ASN1_OBJECT:
+         result = OBJ_cmp(a->value.object, b->value.object);
+         break;
++#ifdef MAGMA_ENABLE_FIXES
+     case V_ASN1_BOOLEAN:
+         result = a->value.boolean - b->value.boolean;
+         break;
++#endif
+     case V_ASN1_NULL:
+         result = 0;             /* They do not have content. */
+         break;
++#ifndef MAGMA_ENABLE_FIXES
++    case V_ASN1_NEG_INTEGER:
++    case V_ASN1_NEG_ENUMERATED:
++#endif
+     case V_ASN1_INTEGER:
+     case V_ASN1_ENUMERATED:
+     case V_ASN1_BIT_STRING:
+@@ -98,6 +104,9 @@ int ASN1_TYPE_cmp(const ASN1_TYPE *a, const ASN1_TYPE *b)
+     case V_ASN1_UTF8STRING:
+     case V_ASN1_OTHER:
+     default:
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL014", a->type == V_ASN1_BOOLEAN);
++#endif
+         result = ASN1_STRING_cmp((ASN1_STRING *)a->value.ptr,
+                                  (ASN1_STRING *)b->value.ptr);
+         break;
+diff --git a/crypto/asn1/tasn_dec.c b/crypto/asn1/tasn_dec.c
+index eff67d87fc..5cafcbe547 100644
+--- a/crypto/asn1/tasn_dec.c
++++ b/crypto/asn1/tasn_dec.c
+@@ -886,6 +886,10 @@ static int asn1_ex_c2i(ASN1_VALUE **pval, const unsigned char *cont, int len,
+             goto err;
+         break;
+ 
++#ifndef MAGMA_ENABLE_FIXES
++    case V_ASN1_NEG_INTEGER:
++    case V_ASN1_NEG_ENUMERATED:
++#endif
+     case V_ASN1_INTEGER:
+     case V_ASN1_ENUMERATED:
+         tint = (ASN1_INTEGER **)pval;
+diff --git a/crypto/asn1/tasn_enc.c b/crypto/asn1/tasn_enc.c
+index 2d24320af9..27b150996a 100644
+--- a/crypto/asn1/tasn_enc.c
++++ b/crypto/asn1/tasn_enc.c
+@@ -586,6 +586,10 @@ static int asn1_ex_i2c(const ASN1_VALUE **pval, unsigned char *cout, int *putype
+         return ossl_i2c_ASN1_BIT_STRING((ASN1_BIT_STRING *)*pval,
+                                         cout ? &cout : NULL);
+ 
++#ifndef MAGMA_ENABLE_FIXES
++    case V_ASN1_NEG_INTEGER:
++    case V_ASN1_NEG_ENUMERATED:
++#endif
+     case V_ASN1_INTEGER:
+     case V_ASN1_ENUMERATED:
+         /*
+diff --git a/crypto/bn/bn_gf2m.c b/crypto/bn/bn_gf2m.c
+index 304c2ea08d..708b9714bb 100644
+--- a/crypto/bn/bn_gf2m.c
++++ b/crypto/bn/bn_gf2m.c
+@@ -670,12 +670,21 @@ static int BN_GF2m_mod_inv_vartime(BIGNUM *r, const BIGNUM *a,
+                 ubits--;
+             }
+ 
++#ifdef MAGMA_ENABLE_FIXES
+             if (ubits <= BN_BITS2) {
+                 if (udp[0] == 0) /* poly was reducible */
+                     goto err;
+                 if (udp[0] == 1)
+                     break;
+             }
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("SSL016", udp[0] == 0);
++#endif
++            if (ubits <= BN_BITS2 && udp[0] == 1)
++                    break;
++
++#endif
+ 
+             if (ubits < vbits) {
+                 i = ubits;
+diff --git a/crypto/bn/bn_local.h b/crypto/bn/bn_local.h
+index 3c8534e1f7..af082bbc13 100644
+--- a/crypto/bn/bn_local.h
++++ b/crypto/bn/bn_local.h
+@@ -663,6 +663,7 @@ BIGNUM *int_bn_mod_inverse(BIGNUM *in,
+ 
+ static ossl_inline BIGNUM *bn_expand(BIGNUM *a, int bits)
+ {
++#ifdef MAGMA_ENABLE_FIXES
+     if (bits > (INT_MAX - BN_BITS2 + 1))
+         return NULL;
+ 
+@@ -670,6 +671,12 @@ static ossl_inline BIGNUM *bn_expand(BIGNUM *a, int bits)
+         return a;
+ 
+     return bn_expand2((a),(bits+BN_BITS2-1)/BN_BITS2);
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL010",bits > (INT_MAX - BN_BITS2 + 1));
++#endif
++    return ((((((bits+BN_BITS2-1))/BN_BITS2)) <= (a)->dmax)?(a):bn_expand2((a),(bits+BN_BITS2-1)/BN_BITS2));
++#endif
+ }
+ 
+ int ossl_bn_check_prime(const BIGNUM *w, int checks, BN_CTX *ctx,
+diff --git a/crypto/evp/encode.c b/crypto/evp/encode.c
+index 2c047fa039..d7d690c4da 100644
+--- a/crypto/evp/encode.c
++++ b/crypto/evp/encode.c
+@@ -169,7 +169,18 @@ int EVP_EncodeUpdate(EVP_ENCODE_CTX *ctx, unsigned char *out, int *outl,
+     if (inl <= 0)
+         return 0;
+     OPENSSL_assert(ctx->length <= (int)sizeof(ctx->enc_data));
++#ifdef MAGMA_ENABLE_FIXES
+     if (ctx->length - ctx->num > inl) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    /**
++    * Potential integer overflow if we supply a large amount
++    * of input data
++    */
++    MAGMA_LOG("SSL006", INT_MAX - inl < ctx->num);
++#endif
++    if ((ctx->num + inl) < ctx->length) {
++#endif
+         memcpy(&(ctx->enc_data[ctx->num]), in, inl);
+         ctx->num += inl;
+         return 1;
+diff --git a/crypto/mdc2/mdc2dgst.c b/crypto/mdc2/mdc2dgst.c
+index 607f9fc73a..a8a04d8aa1 100644
+--- a/crypto/mdc2/mdc2dgst.c
++++ b/crypto/mdc2/mdc2dgst.c
+@@ -12,7 +12,7 @@
+  * internal use.
+  */
+ #include "internal/deprecated.h"
+-
++#include <limits.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -48,7 +48,14 @@ int MDC2_Update(MDC2_CTX *c, const unsigned char *in, size_t len)
+ 
+     i = c->num;
+     if (i != 0) {
++#ifdef MAGMA_ENABLE_FIXES
+         if (len < MDC2_BLOCK - i) {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("SSL007", SIZE_MAX - len < i);
++#endif
++        if (i + len < MDC2_BLOCK) {
++#endif
+             /* partial block */
+             memcpy(&(c->data[i]), in, len);
+             c->num += (int)len;
+diff --git a/crypto/pkcs7/pk7_doit.c b/crypto/pkcs7/pk7_doit.c
+index 441bf78bba..2a2f815f2f 100644
+--- a/crypto/pkcs7/pk7_doit.c
++++ b/crypto/pkcs7/pk7_doit.c
+@@ -217,6 +217,7 @@ BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)
+     OSSL_LIB_CTX *libctx;
+     const char *propq;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (p7 == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_INVALID_NULL_POINTER);
+         return NULL;
+@@ -239,6 +240,11 @@ BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_NO_CONTENT);
+         return NULL;
+     }
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL015", MAGMA_OR(p7 == NULL, p7->d.ptr));
++#endif
++#endif
+ 
+     i = OBJ_obj2nid(p7->type);
+     p7->state = PKCS7_S_HEADER;
+@@ -410,6 +416,7 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+     OSSL_LIB_CTX *libctx;
+     const char *propq;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (p7 == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_INVALID_NULL_POINTER);
+         return NULL;
+@@ -424,9 +431,15 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+         return NULL;
+     }
+ 
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL015", MAGMA_OR(p7 == NULL, p7->d.ptr == NULL));
++#endif
++#endif
+     i = OBJ_obj2nid(p7->type);
+     p7->state = PKCS7_S_HEADER;
+ 
++
+     switch (i) {
+     case NID_pkcs7_signed:
+         /*
+@@ -492,10 +505,15 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+     }
+ 
+     /* Detached content must be supplied via in_bio instead. */
++#ifdef MAGMA_ENABLE_FIXES
+     if (data_body == NULL && in_bio == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_NO_CONTENT);
+         goto err;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++        MAGMA_LOG("SSL011", MAGMA_AND(data_body == NULL, in_bio == NULL));
++#endif
+ 
+     /* We will be checking the signature */
+     if (md_sk != NULL) {
+@@ -636,7 +654,11 @@ BIO *PKCS7_dataDecode(PKCS7 *p7, EVP_PKEY *pkey, BIO *in_bio, X509 *pcert)
+             BIO_push(out, etmp);
+         etmp = NULL;
+     }
++#ifdef MAGMA_ENABLE_FIXES
+     if (in_bio != NULL) {
++#else
++    if (PKCS7_is_detached(p7) || (in_bio != NULL)) {
++#endif
+         bio = in_bio;
+     } else {
+         if (data_body->length > 0)
+@@ -728,6 +750,7 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
+     ASN1_OCTET_STRING *os = NULL;
+     const PKCS7_CTX *p7_ctx;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (p7 == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_INVALID_NULL_POINTER);
+         return 0;
+@@ -740,6 +763,11 @@ int PKCS7_dataFinal(PKCS7 *p7, BIO *bio)
+         return 0;
+     }
+ 
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL015", MAGMA_OR(p7 == NULL, p7->d.ptr == NULL));
++#endif
++#endif
+     ctx_tmp = EVP_MD_CTX_new();
+     if (ctx_tmp == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, ERR_R_MALLOC_FAILURE);
+@@ -957,6 +985,7 @@ int PKCS7_dataVerify(X509_STORE *cert_store, X509_STORE_CTX *ctx, BIO *bio,
+     STACK_OF(X509) *cert;
+     X509 *x509;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     if (p7 == NULL) {
+         ERR_raise(ERR_LIB_PKCS7, PKCS7_R_INVALID_NULL_POINTER);
+         return 0;
+@@ -967,6 +996,11 @@ int PKCS7_dataVerify(X509_STORE *cert_store, X509_STORE_CTX *ctx, BIO *bio,
+         return 0;
+     }
+ 
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL015", MAGMA_OR(p7 == NULL, p7->d.ptr));
++#endif
++#endif
+     if (PKCS7_type_is_signed(p7)) {
+         cert = p7->d.sign->cert;
+     } else if (PKCS7_type_is_signedAndEnveloped(p7)) {
+diff --git a/crypto/rsa/rsa_ameth.c b/crypto/rsa/rsa_ameth.c
+index b1580ca48c..dc79f284a5 100644
+--- a/crypto/rsa/rsa_ameth.c
++++ b/crypto/rsa/rsa_ameth.c
+@@ -617,7 +617,15 @@ static int rsa_item_verify(EVP_MD_CTX *ctx, const ASN1_ITEM *it,
+         ERR_raise(ERR_LIB_RSA, RSA_R_UNSUPPORTED_SIGNATURE_TYPE);
+         return -1;
+     }
++#ifdef MAGMA_ENABLE_FIXES
+     if (ossl_rsa_pss_to_ctx(ctx, NULL, sigalg, pkey) > 0) {
++#else
++    int magma_int = ossl_rsa_pss_to_ctx(ctx, NULL, sigalg, pkey);
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL013", magma_int < 0);
++#endif
++    if (magma_int) {
++#endif
+         /* Carry on */
+         return 2;
+     }
+diff --git a/crypto/x509/v3_addr.c b/crypto/x509/v3_addr.c
+index 8bb35bd8a3..bc0766f915 100644
+--- a/crypto/x509/v3_addr.c
++++ b/crypto/x509/v3_addr.c
+@@ -85,12 +85,31 @@ static int length_from_afi(const unsigned afi)
+  */
+ unsigned int X509v3_addr_get_afi(const IPAddressFamily *f)
+ {
++#ifdef MAGMA_ENABLE_FIXES
+     if (f == NULL
+             || f->addressFamily == NULL
+             || f->addressFamily->data == NULL
+             || f->addressFamily->length < 2)
+         return 0;
+     return (f->addressFamily->data[0] << 8) | f->addressFamily->data[1];
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++    /**
++    *This bug will do a 1 byte overread when the length is too short
++    */
++    MAGMA_LOG("SSL009", MAGMA_AND(f != NULL, \
++            MAGMA_AND(f->addressFamily != NULL, \
++            MAGMA_AND(f->addressFamily->data != NULL, \
++            f->addressFamily->length < 2)))
++    );
++
++#endif
++    return ((f != NULL &&
++            f->addressFamily != NULL && f->addressFamily->data != NULL)
++            ? ((f->addressFamily->data[0] << 8) | (f->addressFamily->data[1]))
++            : 0);
++
++#endif
+ }
+ 
+ /*
+diff --git a/crypto/x509/x509_obj.c b/crypto/x509/x509_obj.c
+index 12c6d6f78b..881315efaf 100644
+--- a/crypto/x509/x509_obj.c
++++ b/crypto/x509/x509_obj.c
+@@ -83,9 +83,22 @@ char *X509_NAME_oneline(const X509_NAME *a, char *buf, int len)
+             type == V_ASN1_PRINTABLESTRING ||
+             type == V_ASN1_TELETEXSTRING ||
+             type == V_ASN1_IA5STRING) {
++#ifdef MAGMA_ENABLE_FIXES
+             if (num > (int)sizeof(ebcdic_buf))
+                 num = sizeof(ebcdic_buf);
+             ascii2ebcdic(ebcdic_buf, q, num);
++#else
++            ascii2ebcdic(ebcdic_buf, q, (num > (int)sizeof(ebcdic_buf))
++                         ? (int)sizeof(ebcdic_buf) : num);
++#ifdef MAGMA_ENABLE_CANARIES
++            /**
++             * When `num` is greater than sizeof(ebcdic_buf), the code below
++             * will overread the `q` buffer, since it points to a fixed-size
++             * buffer whose size is less than `num`.
++             */
++            MAGMA_LOG("SSL004", num > (int)sizeof(ebcdic_buf));
++#endif
++#endif
+             q = ebcdic_buf;
+         }
+ #endif
+diff --git a/crypto/x509/x509_req.c b/crypto/x509/x509_req.c
+index e3f5c2add1..5121c944a6 100644
+--- a/crypto/x509/x509_req.c
++++ b/crypto/x509/x509_req.c
+@@ -44,8 +44,13 @@ X509_REQ *X509_to_X509_REQ(X509 *x, EVP_PKEY *pkey, const EVP_MD *md)
+         goto err;
+ 
+     pktmp = X509_get0_pubkey(x);
++#ifdef MAGMA_ENABLE_FIXES
+     if (pktmp == NULL)
+         goto err;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL012",pktmp == NULL);
++#endif
+     i = X509_REQ_set_pubkey(ret, pktmp);
+     if (!i)
+         goto err;
+diff --git a/crypto/x509/x509_vfy.c b/crypto/x509/x509_vfy.c
+index 18c6172c98..cdbd523df0 100644
+--- a/crypto/x509/x509_vfy.c
++++ b/crypto/x509/x509_vfy.c
+@@ -1069,10 +1069,21 @@ static int get_crl_sk(X509_STORE_CTX *ctx, X509_CRL **pcrl, X509_CRL **pdcrl,
+         crl = sk_X509_CRL_value(crls, i);
+         reasons = *preasons;
+         crl_score = get_crl_score(ctx, &crl_issuer, &reasons, crl, x);
++#ifdef MAGMA_ENABLE_FIXES
+         if (crl_score < best_score || crl_score == 0)
++#else
++        if (crl_score < best_score)
++#endif
+             continue;
+         /* If current CRL is equivalent use it if it is newer */
++#ifdef MAGMA_ENABLE_FIXES
+         if (crl_score == best_score && best_crl != NULL) {
++#else
++        if (crl_score == best_score) {
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("SSL017", best_crl == NULL);
++#endif
++#endif
+             int day, sec;
+ 
+             if (ASN1_TIME_diff(&day, &sec, X509_CRL_get0_lastUpdate(best_crl),
+diff --git a/ssl/record/rec_layer_s3.c b/ssl/record/rec_layer_s3.c
+index 28e02e642c..2c681d7612 100644
+--- a/ssl/record/rec_layer_s3.c
++++ b/ssl/record/rec_layer_s3.c
+@@ -1454,11 +1454,20 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+ 
+             memcpy(buf, &(rr->data[rr->off]), n);
+             buf += n;
++#ifdef MAGMA_ENABLE_FIXES
+             if (peek) {
+                 /* Mark any zero length record as consumed CVE-2016-6305 */
+                 if (SSL3_RECORD_get_length(rr) == 0)
+                     SSL3_RECORD_set_read(rr);
+             } else {
++#else
++#ifdef MAGMA_ENABLE_CANARIES
++            MAGMA_LOG("SSL019", MAGMA_AND(peek, \
++                                MAGMA_AND(SSL3_RECORD_get_length(rr) == 0, \
++                                          !SSL3_RECORD_is_read(rr))));
++#endif
++            if (!peek) {
++#endif
+                 if (s->options & SSL_OP_CLEANSE_PLAINTEXT)
+                     OPENSSL_cleanse(&(rr->data[rr->off]), n);
+                 SSL3_RECORD_sub_length(rr, n);
+diff --git a/ssl/statem/extensions_srvr.c b/ssl/statem/extensions_srvr.c
+index e8e57cd5d9..d911d42a67 100644
+--- a/ssl/statem/extensions_srvr.c
++++ b/ssl/statem/extensions_srvr.c
+@@ -329,6 +329,7 @@ int tls_parse_ctos_status_request(SSL *s, PACKET *pkt, unsigned int context,
+         return 0;
+     }
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     /*
+      * We remove any OCSP_RESPIDs from a previous handshake
+      * to prevent unbounded memory growth - CVE-2016-6304
+@@ -343,6 +344,23 @@ int tls_parse_ctos_status_request(SSL *s, PACKET *pkt, unsigned int context,
+     } else {
+         s->ext.ocsp.ids = NULL;
+     }
++#else
++    if (PACKET_remaining(&responder_id_list) > 0 && s->ext.ocsp.ids == NULL) {
++        s->ext.ocsp.ids = sk_OCSP_RESPID_new_null();
++        if (s->ext.ocsp.ids == NULL) {
++            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
++            return 0;
++        }
++    }
++#ifdef MAGMA_ENABLE_CANARIES
++    /**
++     * If there is a pending request packet and there exists at least one
++     * previous request in the stack, then unbounded memory growth is possible.
++     */
++    MAGMA_LOG("SSL005", MAGMA_AND(PACKET_remaining(&responder_id_list) > 0, \
++        sk_OCSP_RESPID_num(s->ext.ocsp.ids) > 0));
++#endif
++#endif
+ 
+     while (PACKET_remaining(&responder_id_list) > 0) {
+         OCSP_RESPID *id;
+diff --git a/ssl/statem/statem.c b/ssl/statem/statem.c
+index 4c463974ea..1ef714d441 100644
+--- a/ssl/statem/statem.c
++++ b/ssl/statem/statem.c
+@@ -512,7 +512,12 @@ static int grow_init_buf(SSL *s, size_t size) {
+     if (size < msg_offset)
+         return 0;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     s->init_msg = s->init_buf->data + msg_offset;
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL002", s->init_msg != (s->init_buf->data + msg_offset));
++#endif
+ 
+     return 1;
+ }
+diff --git a/ssl/statem/statem_clnt.c b/ssl/statem/statem_clnt.c
+index d5aa8797ff..0f022388a5 100644
+--- a/ssl/statem/statem_clnt.c
++++ b/ssl/statem/statem_clnt.c
+@@ -2914,10 +2914,15 @@ static int tls_construct_cke_dhe(SSL *s, WPACKET *pkt)
+     }
+ 
+     ckey = ssl_generate_pkey(s, skey);
++#ifdef MAGMA_ENABLE_FIXES
+     if (ckey == NULL) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+         goto err;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL008",ckey == NULL);
++#endif
+ 
+     if (ssl_derive(s, ckey, skey, 0) == 0) {
+         /* SSLfatal() already called */
+@@ -2975,10 +2980,15 @@ static int tls_construct_cke_ecdhe(SSL *s, WPACKET *pkt)
+     }
+ 
+     ckey = ssl_generate_pkey(s, skey);
++#ifdef MAGMA_ENABLE_FIXES
+     if (ckey == NULL) {
+         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+         goto err;
+     }
++#endif
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL008",ckey == NULL);
++#endif
+ 
+     if (ssl_derive(s, ckey, skey, 0) == 0) {
+         /* SSLfatal() already called */
+diff --git a/ssl/statem/statem_dtls.c b/ssl/statem/statem_dtls.c
+index 8c588fd590..780e19e426 100644
+--- a/ssl/statem/statem_dtls.c
++++ b/ssl/statem/statem_dtls.c
+@@ -444,12 +444,19 @@ static int dtls1_preprocess_fragment(SSL *s, struct hm_header_st *msg_hdr)
+     frag_off = msg_hdr->frag_off;
+     frag_len = msg_hdr->frag_len;
+ 
++#ifdef MAGMA_ENABLE_FIXES
+     /* sanity checking */
+     if ((frag_off + frag_len) > msg_len
+             || msg_len > dtls1_max_handshake_message_len(s)) {
++#else
++    if ((frag_off + frag_len) > msg_len) {
++#endif
+         SSLfatal(s, SSL_AD_ILLEGAL_PARAMETER, SSL_R_EXCESSIVE_MESSAGE_SIZE);
+         return 0;
+     }
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL018", msg_len > dtls1_max_handshake_message_len(s));
++#endif
+ 
+     if (s->d1->r_msg_hdr.frag_off == 0) { /* first fragment */
+         /*
+diff --git a/ssl/t1_lib.c b/ssl/t1_lib.c
+index 3579202c22..3bdbffa970 100644
+--- a/ssl/t1_lib.c
++++ b/ssl/t1_lib.c
+@@ -1892,11 +1892,18 @@ SSL_TICKET_STATUS tls_decrypt_ticket(SSL *s, const unsigned char *etick,
+     }
+ 
+     /* Sanity check ticket length: must exceed keyname + IV + HMAC */
++#ifdef MAGMA_ENABLE_FIXES
+     if (eticklen <=
+         TLSEXT_KEYNAME_LENGTH + EVP_CIPHER_CTX_get_iv_length(ctx) + mlen) {
++#else
++    if (eticklen < 48) {
++#endif
+         ret = SSL_TICKET_NO_DECRYPT;
+         goto end;
+     }
++#ifdef MAGMA_ENABLE_CANARIES
++    MAGMA_LOG("SSL020", eticklen <= TLSEXT_KEYNAME_LENGTH + EVP_CIPHER_CTX_get_iv_length(ctx) + mlen);
++#endif
+     eticklen -= mlen;
+     /* Check HMAC of encrypted ticket */
+     if (ssl_hmac_update(hctx, etick, eticklen) <= 0
